@@ -1,0 +1,22 @@
+name: yang-assistant
+description: AI-powered code review for Pull Requests
+author: yangyang-organization
+
+inputs:
+  API_KEY:
+    description: API key for authentication with the YangYang API service
+    required: true
+  LLM_MODEL:
+    description: Name of the LLM model to use for code review
+    required: true
+  github_token:
+    description: GitHub token used to comment on PR
+    required: true
+
+branding:
+  icon: "shield"
+  color: "red"
+
+runs:
+  using: node20
+  main: dist/index.js

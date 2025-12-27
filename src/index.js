@@ -176,7 +176,8 @@ async function run() {
       if (isPushEvent) {
         // Save review as artifact for push events
         try {
-          const artifactPath = path.join(process.cwd(), `yang-code-review-${commitSha.substring(0, 7)}.md`);
+          const artifactFileName = `yang-code-review-${commitSha.substring(0, 7)}.md`;
+          const artifactPath = path.resolve(process.cwd(), artifactFileName);
           
           // Create the review content with metadata
           const artifactContent = `# 🤖 Yang Code Review (YCR)\n\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n${reviewContent}`;
@@ -184,10 +185,15 @@ async function run() {
           // Write to file
           fs.writeFileSync(artifactPath, artifactContent, 'utf8');
           
-          // Upload artifact
+          // Verify file exists before uploading
+          if (!fs.existsSync(artifactPath)) {
+            throw new Error(`Artifact file was not created: ${artifactPath}`);
+          }
+          
+          // Upload artifact - use relative filename from current working directory
           const {id, size} = await artifact.uploadArtifact(
             'yang-code-review',
-            [artifactPath],
+            [artifactFileName],
             {
               retentionDays: 90
             }
@@ -220,7 +226,8 @@ async function run() {
         
         // Save review as artifact for pull request events
         try {
-          const artifactPath = path.join(process.cwd(), `yang-code-review-pr-${pull_number}-${prSha.substring(0, 7)}.md`);
+          const artifactFileName = `yang-code-review-pr-${pull_number}-${prSha.substring(0, 7)}.md`;
+          const artifactPath = path.resolve(process.cwd(), artifactFileName);
           
           // Create the review content with metadata
           const artifactContent = `# 🤖 Yang Code Review (YCR)\n\n**Pull Request:** #${pull_number}\n**Commit:** ${prSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n${reviewContent}`;
@@ -228,10 +235,15 @@ async function run() {
           // Write to file
           fs.writeFileSync(artifactPath, artifactContent, 'utf8');
           
-          // Upload artifact
+          // Verify file exists before uploading
+          if (!fs.existsSync(artifactPath)) {
+            throw new Error(`Artifact file was not created: ${artifactPath}`);
+          }
+          
+          // Upload artifact - use relative filename from current working directory
           const {id, size} = await artifact.uploadArtifact(
             `yang-code-review-pr-${pull_number}`,
-            [artifactPath],
+            [artifactFileName],
             {
               retentionDays: 90
             }

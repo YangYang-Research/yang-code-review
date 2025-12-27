@@ -42,19 +42,20 @@ YangYang Code Review (YCR) for Pull Requests
 name: YangYang Code Review (YCR)
 
 on:
+  push:
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
-  review:
+  code-review:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-      - uses: actions/checkout@v3
+        uses: actions/checkout@v3
 
       - name: yang-code-review
-      - uses: YangYang-Research/yang-code-review@v1.0
+        uses: YangYang-Research/yang-code-review@v1.0.1
         with:
           CLIENT_ID: ${{ secrets.YANG_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.YANG_CLIENT_SECRET }}

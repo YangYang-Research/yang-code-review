@@ -43,7 +43,8 @@ name: YangYang Code Review (YCR)
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    branches:
+      - main
 
 jobs:
   review:
@@ -51,7 +52,7 @@ jobs:
     steps:
       - name: Checkout code
       - uses: actions/checkout@v3
-      
+
       - name: yang-code-review
       - uses: YangYang-Research/yang-code-review@v1.0
         with:

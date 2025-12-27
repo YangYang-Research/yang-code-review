@@ -32,7 +32,7 @@ async function run() {
     const repo = context.repo.repo;
     const pull_number = pr.number;
 
-    const octokit = github.getOctokit(token);
+    const octokit = github.getOctokit(githubToken);
 
     // Fetch PR diff
     const diffResponse = await octokit.request(

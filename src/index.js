@@ -132,7 +132,7 @@ async function run() {
           chat_session_id: chatSessionId,
           agent_name: agentName,
           model_name: modelName,
-          temprature: modelTemperature,
+          temperature: modelTemperature,
           messages: [
             {
               role: 'user',

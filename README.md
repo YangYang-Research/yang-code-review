@@ -71,6 +71,8 @@ jobs:
 |------------|------------|------------|------------|------------|------------|
 | Free Trial | zekX2UMXId | 1/P5uT4+S`0-\19/o62m | 100 requests per day | 8000 tokens per request | 5000 tokens per request |
 
+*Note: The quota is reset at 00:00 UTC every day.*
+
 ## 🏷 Marketplace
 
 This action is marketplace-ready:
@@ -88,85 +90,3 @@ npm run build
 ```
 
 This will generate `dist/index.js` which **must be committed**.
-
-## 🧪 Testing
-
-There are several ways to test this GitHub Action:
-
-### Method 1: Local Test Script (Recommended for Development)
-
-Use the included test script to mock the GitHub Actions environment:
-
-```bash
-# Set required environment variables
-export CLIENT_ID="your-client-id"
-export CLIENT_SECRET="your-client-secret"
-export AGENT_NAME="yang-code-review"
-export MODEL_NAME="anthropic_claude_sonet_4_5"
-export MODEL_TEMPERATURE="0.7"
-export GITHUB_TOKEN="your-github-token"  # Optional, for testing API calls
-
-# Run the test
-node test.js
-```
-
-The test script will:
-- Mock `@actions/core` and `@actions/github` modules
-- Simulate a pull request context
-- Execute the action code
-- Show any errors or failures
-
-### Method 2: Using `act` (Run GitHub Actions Locally)
-
-Install [act](https://github.com/nektos/act) to run GitHub Actions locally:
-
-```bash
-# Install act (macOS)
-brew install act
-
-# Or using other methods (see act documentation)
-
-# Create a test workflow file: .github/workflows/test.yml
-# Then run:
-act pull_request
-```
-
-### Method 3: Test in a Real Repository
-
-1. Create a test repository on GitHub
-2. Create a test workflow file (`.github/workflows/test.yml`):
-
-```yaml
-name: Test YCR Action
-
-on:
-  pull_request:
-    types: [opened, synchronize]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: ./
-        with:
-          CLIENT_ID: ${{ secrets.CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-          AGENT_NAME: 'yang-code-review'
-          MODEL_NAME: 'anthropic_claude_sonet_4_5'
-          MODEL_TEMPERATURE: '0.7'
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
-
-3. Create a test PR to trigger the workflow
-4. Check the Actions tab for results
-
-### Method 4: Manual Testing Checklist
-
-- [ ] Verify all required inputs are provided
-- [ ] Test with valid credentials
-- [ ] Test with invalid credentials (should fail gracefully)
-- [ ] Test on a real pull request
-- [ ] Verify secrets are masked in logs
-- [ ] Test API timeout handling (15 seconds)
-- [ ] Verify error messages are clear

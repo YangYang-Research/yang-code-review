@@ -1,6 +1,6 @@
-# 🤖 YangYang Code Review (YCR)
+# 🤖 Yang Code Review (YCR)
 
-YangYang Code Review (YCR) for your GitHub repositories.
+Yang Code Review (YCR) is a AI agent that helps you review code changes in your GitHub repositories.
 
 ## 🛡 Security
 
@@ -10,6 +10,7 @@ YangYang Code Review (YCR) for your GitHub repositories.
 
 - `CLIENT_ID` – Client ID for authentication with the YangYang API service
 - `CLIENT_SECRET` – Client secret for authentication with the YangYang API service
+- `GITHUB_TOKEN` – GitHub token for PR comments
 
 ## ⚙️ Inputs
 

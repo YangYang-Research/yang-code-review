@@ -34688,6 +34688,14 @@ function wrappy (fn, cb) {
 
 /***/ }),
 
+/***/ 1841:
+/***/ ((module) => {
+
+module.exports = eval("require")("@actions/artifact");
+
+
+/***/ }),
+
 /***/ 2613:
 /***/ ((module) => {
 
@@ -37285,6 +37293,8 @@ var __webpack_exports__ = {};
 var core = __nccwpck_require__(7484);
 // EXTERNAL MODULE: ./node_modules/@actions/github/lib/github.js
 var github = __nccwpck_require__(3228);
+// EXTERNAL MODULE: ./node_modules/@vercel/ncc/dist/ncc/@@notfound.js?@actions/artifact
+var artifact = __nccwpck_require__(1841);
 ;// CONCATENATED MODULE: external "node:http"
 const external_node_http_namespaceObject = require("node:http");
 ;// CONCATENATED MODULE: external "node:https"
@@ -39433,7 +39443,16 @@ function fixResponseChunkedTransferBadEnding(request, errorCallback) {
 // EXTERNAL MODULE: external "crypto"
 var external_crypto_ = __nccwpck_require__(6982);
 var external_crypto_default = /*#__PURE__*/__nccwpck_require__.n(external_crypto_);
+// EXTERNAL MODULE: external "fs"
+var external_fs_ = __nccwpck_require__(9896);
+var external_fs_default = /*#__PURE__*/__nccwpck_require__.n(external_fs_);
+// EXTERNAL MODULE: external "path"
+var external_path_ = __nccwpck_require__(6928);
+var external_path_default = /*#__PURE__*/__nccwpck_require__.n(external_path_);
 ;// CONCATENATED MODULE: ./src/index.js
+
+
+
 
 
 
@@ -39457,33 +39476,93 @@ async function run() {
     core.setSecret(githubToken);
 
     const context = github.context;
+    const owner = context.repo.owner;
+    const repo = context.repo.repo;
+    const octokit = github.getOctokit(githubToken);
 
-    if (!context.payload.pull_request) {
-      core.setFailed('This action can only run on pull_request events');
+    let diff;
+    let isPushEvent = false;
+    let commitSha = null;
+
+    // Handle both pull_request and push events
+    if (context.payload.pull_request) {
+      // Pull request event
+      const pr = context.payload.pull_request;
+      const pull_number = pr.number;
+
+      // Fetch PR diff
+      const diffResponse = await octokit.request(
+        'GET /repos/{owner}/{repo}/pulls/{pull_number}',
+        {
+          owner,
+          repo,
+          pull_number,
+          headers: {
+            accept: 'application/vnd.github.v3.diff'
+          }
+        }
+      );
+
+      diff = diffResponse.data;
+    } else if (context.eventName === 'push') {
+      // Push event
+      isPushEvent = true;
+      commitSha = context.sha;
+      const beforeSha = context.payload.before;
+      const afterSha = context.payload.after;
+
+      // Get the diff between before and after commits
+      try {
+        const compareResponse = await octokit.rest.repos.compareCommits({
+          owner,
+          repo,
+          base: beforeSha,
+          head: afterSha
+        });
+
+        // Build diff from the comparison
+        diff = '';
+        for (const file of compareResponse.data.files || []) {
+          diff += `diff --git a/${file.filename} b/${file.filename}\n`;
+          diff += `index ${file.sha.substring(0, 7)}..${file.sha.substring(0, 7)} ${file.status}\n`;
+          diff += `--- a/${file.filename}\n`;
+          diff += `+++ b/${file.filename}\n`;
+          if (file.patch) {
+            diff += file.patch + '\n';
+          }
+        }
+      } catch (error) {
+        core.warning(`Failed to get diff from compareCommits: ${error.message}`);
+        // Fallback: try to get diff from the commit directly
+        try {
+          const commitResponse = await octokit.rest.repos.getCommit({
+            owner,
+            repo,
+            ref: commitSha
+          });
+          
+          // Build diff from commit files
+          diff = '';
+          for (const file of commitResponse.data.files || []) {
+            diff += `diff --git a/${file.filename} b/${file.filename}\n`;
+            if (file.patch) {
+              diff += file.patch + '\n';
+            }
+          }
+        } catch (commitError) {
+          throw new Error(`Failed to get commit diff: ${commitError.message}`);
+        }
+      }
+    } else {
+      core.setFailed(`This action can only run on pull_request or push events. Current event: ${context.eventName}`);
       return;
     }
 
-    const pr = context.payload.pull_request;
-    const owner = context.repo.owner;
-    const repo = context.repo.repo;
-    const pull_number = pr.number;
-
-    const octokit = github.getOctokit(githubToken);
-
-    // Fetch PR diff
-    const diffResponse = await octokit.request(
-      'GET /repos/{owner}/{repo}/pulls/{pull_number}',
-      {
-        owner,
-        repo,
-        pull_number,
-        headers: {
-          accept: 'application/vnd.github.v3.diff'
-        }
-      }
-    );
-
-    const diff = diffResponse.data;
+    // Check if diff is empty
+    if (!diff || diff.trim().length === 0) {
+      core.info('No changes detected in the diff. Skipping code review.');
+      return;
+    }
 
     // Call YangYang API with timeout (increased for streaming responses)
     const controller = new AbortController();
@@ -39645,18 +39724,47 @@ async function run() {
       console.log('\n\n=== Full Review Content ===');
       console.log(reviewContent);
 
-      // Post review as a comment on the PR
-      try {
-        await octokit.rest.issues.createComment({
-          owner,
-          repo,
-          issue_number: pull_number,
-          body: `## 🤖 YangYang Code Review\n\n${reviewContent}`
-        });
-        console.log(`\n✅ Review posted as comment on PR #${pull_number}`);
-      } catch (commentError) {
-        core.warning(`Failed to post comment on PR: ${commentError.message}`);
-        // Don't fail the action if comment posting fails
+      // Handle output based on event type
+      if (isPushEvent) {
+        // Save review as artifact for push events
+        try {
+          const artifactName = `code-review-${commitSha.substring(0, 7)}`;
+          const artifactPath = external_path_default().join(process.cwd(), 'code-review-result.md');
+          
+          // Create the review content with metadata
+          const artifactContent = `# 🤖 YangYang Code Review\n\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n${reviewContent}`;
+          
+          // Write to file
+          external_fs_default().writeFileSync(artifactPath, artifactContent, 'utf8');
+          
+          // Upload artifact
+          const artifactClient = (0,artifact.create)();
+          await artifactClient.uploadArtifact(artifactName, [artifactPath], process.cwd(), {
+            retentionDays: 90
+          });
+          
+          console.log(`\n✅ Review saved as artifact: ${artifactName}`);
+        } catch (artifactError) {
+          core.warning(`Failed to save artifact: ${artifactError.message}`);
+          // Don't fail the action if artifact upload fails
+        }
+      } else {
+        // Post review as a comment on the PR for pull_request events
+        const pr = context.payload.pull_request;
+        const pull_number = pr.number;
+        
+        try {
+          await octokit.rest.issues.createComment({
+            owner,
+            repo,
+            issue_number: pull_number,
+            body: `## 🤖 YangYang Code Review\n\n${reviewContent}`
+          });
+          console.log(`\n✅ Review posted as comment on PR #${pull_number}`);
+        } catch (commentError) {
+          core.warning(`Failed to post comment on PR: ${commentError.message}`);
+          // Don't fail the action if comment posting fails
+        }
       }
 
     } catch (error) {

@@ -91,3 +91,7 @@ npm run build
 ```
 
 This will generate `dist/index.js` which **must be committed**.
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.

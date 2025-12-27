@@ -124,7 +124,8 @@ async function run() {
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
-          'x-yang-auth': `Basic ${auth}`
+          'x-yang-auth': `Basic ${auth}`,
+          'user-agent': 'github-actions/yang-code-review'
         },
         body: JSON.stringify({
           chat_session_id: chatSessionId,

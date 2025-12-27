@@ -51,7 +51,7 @@ jobs:
     steps:
       - name: Checkout code
       - uses: actions/checkout@v3
-    steps:
+      
       - name: yang-code-review
       - uses: YangYang-Research/yang-code-review@v1.0
         with:

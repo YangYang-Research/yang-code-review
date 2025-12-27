@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import * as artifact from '@actions/artifact';
+import {DefaultArtifactClient} from '@actions/artifact';
 import fetch from 'node-fetch';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -27,6 +27,7 @@ async function run() {
     const owner = context.repo.owner;
     const repo = context.repo.repo;
     const octokit = github.getOctokit(githubToken);
+    const artifact = new DefaultArtifactClient();
 
     let diff;
     let isPushEvent = false;
@@ -201,7 +202,9 @@ async function run() {
         // Post review as a comment on the PR for pull_request events
         const pr = context.payload.pull_request;
         const pull_number = pr.number;
+        const prSha = pr.head.sha;
         
+        // Post comment on PR
         try {
           await octokit.rest.issues.createComment({
             owner,
@@ -213,6 +216,31 @@ async function run() {
         } catch (commentError) {
           core.warning(`Failed to post comment on PR: ${commentError.message}`);
           // Don't fail the action if comment posting fails
+        }
+        
+        // Save review as artifact for pull request events
+        try {
+          const artifactPath = path.join(process.cwd(), `yang-code-review-pr-${pull_number}-${prSha.substring(0, 7)}.md`);
+          
+          // Create the review content with metadata
+          const artifactContent = `# 🤖 Yang Code Review (YCR)\n\n**Pull Request:** #${pull_number}\n**Commit:** ${prSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n${reviewContent}`;
+          
+          // Write to file
+          fs.writeFileSync(artifactPath, artifactContent, 'utf8');
+          
+          // Upload artifact
+          const {id, size} = await artifact.uploadArtifact(
+            `yang-code-review-pr-${pull_number}`,
+            [artifactPath],
+            {
+              retentionDays: 90
+            }
+          );
+          
+          console.log(`\n✅ Review saved as artifact: yang-code-review-pr-${pull_number} (id: ${id}, bytes: ${size})`);
+        } catch (artifactError) {
+          core.warning(`Failed to save artifact: ${artifactError.message}`);
+          // Don't fail the action if artifact upload fails
         }
       }
 

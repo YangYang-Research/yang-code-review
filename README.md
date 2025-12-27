@@ -22,6 +22,20 @@ YangYang Code Review (YCR) for Pull Requests
 | MODEL_TEMPERATURE | yes | Temperature for the model |
 | github_token | yes | GitHub token for PR comments |
 
+## Models Supported
+
+| Model Name | Description |
+|------------|-------------|
+| anthropic_claude_sonet_4_5 | Claude Sonet 4.5 |
+| gpt_oss_120b | GPT-OSS 120B |
+| llama_4_scout_17b_instruct | Llama 4 Scout 17B Instruct |
+
+## Agents Supported
+
+| Agent Name | Description |
+|------------|-------------|
+| yang-code-review | YangYang Code Review |
+
 ## 🚀 Usage Example
 
 ```yaml
@@ -44,6 +58,12 @@ jobs:
           MODEL_TEMPERATURE: 0.7
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+## Free Trial
+
+| Account Type | Client ID | Client Secret | Quota | Input Limit | Output Limit |
+|------------|------------|------------|------------|------------|------------|
+| Free Trial | zekX2UMXId | }qzb/&fx|Uef#SkW@F+YECoUMUx>&d | 100 requests per day | 8000 tokens per request | 5000 tokens per request |
 
 ## 🏷 Marketplace
 

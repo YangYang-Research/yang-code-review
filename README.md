@@ -63,7 +63,7 @@ jobs:
 
 | Account Type | Client ID | Client Secret | Quota | Input Limit | Output Limit |
 |------------|------------|------------|------------|------------|------------|
-| Free Trial | zekX2UMXId | }qzb/&fx|Uef#SkW@F+YECoUMUx>&d | 100 requests per day | 8000 tokens per request | 5000 tokens per request |
+| Free Trial | zekX2UMXId | 1/P5uT4+S`0-\19/o62m | 100 requests per day | 8000 tokens per request | 5000 tokens per request |
 
 ## 🏷 Marketplace
 

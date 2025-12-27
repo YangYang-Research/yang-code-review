@@ -20,7 +20,7 @@ YangYang Code Review (YCR) for your GitHub repositories.
 | AGENT_NAME | yes | Name of the agent to use for code review |
 | MODEL_NAME | yes | Name of the model to use for code review |
 | MODEL_TEMPERATURE | yes | Temperature for the model |
-| github_token | yes | GitHub token for PR comments |
+| GITHUB_TOKEN | yes | GitHub token for PR comments |
 
 ## Models Supported
 
@@ -55,7 +55,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: yang-code-review
-        uses: YangYang-Research/yang-code-review@v1.0.1
+        uses: YangYang-Research/yang-code-review@v1.0.7
         with:
           CLIENT_ID: ${{ secrets.YANG_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.YANG_CLIENT_SECRET }}

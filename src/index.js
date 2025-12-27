@@ -152,7 +152,7 @@ async function run() {
         if (errorText.includes('Just a moment...') || errorText.includes('_cf_chl_opt') || errorText.includes('challenge-platform')) {
           throw new Error('API request was blocked by Cloudflare protection. The API endpoint may be temporarily unavailable or require additional authentication.');
         }
-        throw new Error(`LLM API error: ${apiResponse.status} - ${errorText.substring(0, 500)}`);
+        throw new Error(`YangYang API error: ${apiResponse.status} - ${errorText.substring(0, 500)}`);
       }
 
       // Note: HTML responses will be detected in the first chunk during streaming
@@ -163,7 +163,7 @@ async function run() {
       let isFirstChunk = true;
       
       if (!apiResponse.body) {
-        throw new Error('Response body is null or undefined');
+        throw new Error('YangYang API response body is null or undefined');
       }
 
       // Process the stream

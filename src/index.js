@@ -143,9 +143,6 @@ async function run() {
 
       clearTimeout(timeout);
 
-      // Check response status and content type
-      const contentType = apiResponse.headers.get('content-type') || '';
-      
       if (!apiResponse.ok) {
         // For error responses, read as text to check for Cloudflare challenges
         const errorText = await apiResponse.text();
@@ -155,118 +152,19 @@ async function run() {
         throw new Error(`YangYang API error: ${apiResponse.status} - ${errorText.substring(0, 500)}`);
       }
 
-      // Note: HTML responses will be detected in the first chunk during streaming
-
-      // Handle streaming response
-      let fullResponse = '';
-      let accumulatedContent = '';
-      let isFirstChunk = true;
+      // Handle response like test.js example
+      const reviewContent = await apiResponse.text();
       
-      if (!apiResponse.body) {
-        throw new Error('YangYang API response body is null or undefined');
+      // Check for Cloudflare challenge or HTML responses
+      if (reviewContent.includes('Just a moment...') || reviewContent.includes('_cf_chl_opt') || reviewContent.includes('challenge-platform')) {
+        throw new Error('API request was blocked by Cloudflare protection. The API endpoint may be temporarily unavailable or require additional authentication.');
       }
-
-      // Process the stream
-      const reader = apiResponse.body.getReader();
-      const decoder = new TextDecoder();
-      
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          
-          if (done) {
-            // Decode any remaining buffered data
-            const remaining = decoder.decode();
-            if (remaining) {
-              fullResponse += remaining;
-              accumulatedContent += remaining;
-              process.stdout.write(remaining);
-            }
-            break;
-          }
-          
-          const chunk = decoder.decode(value, { stream: true });
-          fullResponse += chunk;
-          
-          // Check first chunk for Cloudflare challenge or HTML
-          if (isFirstChunk) {
-            isFirstChunk = false;
-            if (chunk.includes('Just a moment...') || chunk.includes('_cf_chl_opt') || chunk.includes('challenge-platform')) {
-              throw new Error('API request was blocked by Cloudflare protection. The API endpoint may be temporarily unavailable or require additional authentication.');
-            }
-            if (chunk.trim().startsWith('<!DOCTYPE') || chunk.trim().startsWith('<html')) {
-              throw new Error('API returned HTML instead of a stream. This may indicate the request was blocked or redirected.');
-            }
-          }
-          
-          // Handle Server-Sent Events (SSE) format
-          if (contentType.includes('text/event-stream') || chunk.includes('data: ')) {
-            const lines = chunk.split('\n');
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6).trim();
-                if (data === '[DONE]') {
-                  continue;
-                }
-                try {
-                  const parsed = JSON.parse(data);
-                  // Extract content from the stream chunk
-                  if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta) {
-                    const deltaContent = parsed.choices[0].delta.content || '';
-                    accumulatedContent += deltaContent;
-                    process.stdout.write(deltaContent);
-                  } else if (parsed.content) {
-                    accumulatedContent += parsed.content;
-                    process.stdout.write(parsed.content);
-                  } else if (parsed.text) {
-                    accumulatedContent += parsed.text;
-                    process.stdout.write(parsed.text);
-                  }
-                } catch (e) {
-                  // Not JSON, might be plain text chunk
-                  if (data && data !== '[DONE]') {
-                    accumulatedContent += data;
-                    process.stdout.write(data);
-                  }
-                }
-              }
-            }
-          } else {
-            // Handle plain text or NDJSON stream
-            const lines = chunk.split('\n').filter(line => line.trim());
-            for (const line of lines) {
-              if (line.trim()) {
-                try {
-                  const parsed = JSON.parse(line);
-                  if (parsed.content) {
-                    accumulatedContent += parsed.content;
-                    process.stdout.write(parsed.content);
-                  } else if (parsed.text) {
-                    accumulatedContent += parsed.text;
-                    process.stdout.write(parsed.text);
-                  } else if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta) {
-                    const deltaContent = parsed.choices[0].delta.content || '';
-                    accumulatedContent += deltaContent;
-                    process.stdout.write(deltaContent);
-                  }
-                } catch (e) {
-                  // Plain text chunk
-                  accumulatedContent += line;
-                  process.stdout.write(line);
-                }
-              }
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock();
+      if (reviewContent.trim().startsWith('<!DOCTYPE') || reviewContent.trim().startsWith('<html')) {
+        throw new Error('API returned HTML instead of expected response. This may indicate the request was blocked or redirected.');
       }
-
-      // Get the final review content
-      const reviewContent = accumulatedContent || fullResponse;
       
       if (!reviewContent || reviewContent.trim().length === 0) {
-        throw new Error('Received empty response from LLM API');
+        throw new Error('Received empty response from YangYang API');
       }
 
       // Log the full accumulated content
@@ -281,7 +179,7 @@ async function run() {
           const artifactPath = path.join(process.cwd(), 'code-review-result.md');
           
           // Create the review content with metadata
-          const artifactContent = `# 🤖 YangYang Code Review\n\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n${reviewContent}`;
+          const artifactContent = `# 🤖 Yang Code Review (YCR)\n\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n${reviewContent}`;
           
           // Write to file
           fs.writeFileSync(artifactPath, artifactContent, 'utf8');
@@ -307,7 +205,7 @@ async function run() {
             owner,
             repo,
             issue_number: pull_number,
-            body: `## 🤖 YangYang Code Review\n\n${reviewContent}`
+            body: `## 🤖 Yang Code Review (YCR)\n\n${reviewContent}`
           });
           console.log(`\n✅ Review posted as comment on PR #${pull_number}`);
         } catch (commentError) {

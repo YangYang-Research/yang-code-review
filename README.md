@@ -1,9 +1,10 @@
 <p align="center">
-  <img width="200" height="200" alt="YangCodeReview" src="https://github.com/user-attachments/assets/32c60a01-62f4-4951-aea3-ef9e279d7e28" />
+  <img width="200" height="200" alt="YangYang_Icon_Merge" src="https://github.com/user-attachments/assets/0aea20ca-a436-48dd-b71f-df58ff3678a9" />
+  <h3 align="center">Yang Code Review (YCR)</h3>
+  <p align="center">Yang Code Review (YCR) is a AI agent that helps you review code changes in your GitHub repositories.</p>
 </p>
-<h5><p align="center">Yang Code Review (YCR)</p></h5>
 
-Yang Code Review (YCR) is a AI agent that helps you review code changes in your GitHub repositories.
+---
 
 ## Yang Code Review Standard
 

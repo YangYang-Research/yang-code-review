@@ -176,7 +176,7 @@ async function run() {
       if (isPushEvent) {
         // Save review as artifact for push events
         try {
-          const artifactFileName = `yang-code-review-${commitSha.substring(0, 7)}.md`;
+          const artifactFileName = `yang-code-review-${commitSha.substring(0, 7)}-report.md`;
           const artifactPath = path.resolve(process.cwd(), artifactFileName);
           
           // Create the review content with metadata
@@ -226,7 +226,7 @@ async function run() {
         
         // Save review as artifact for pull request events
         try {
-          const artifactFileName = `yang-code-review-pr-${pull_number}-${prSha.substring(0, 7)}.md`;
+          const artifactFileName = `yang-code-review-pr-${pull_number}-${prSha.substring(0, 7)}-report.md`;
           const artifactPath = path.resolve(process.cwd(), artifactFileName);
           
           // Create the review content with metadata

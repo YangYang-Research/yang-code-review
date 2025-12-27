@@ -1,6 +1,6 @@
 # 🤖 YangYang Code Review (YCR)
 
-YangYang Code Review (YCR) for Pull Requests
+YangYang Code Review (YCR) for your GitHub repositories.
 
 ## 🛡 Security
 

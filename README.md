@@ -6,7 +6,7 @@
 
 ---
 
-## Yang Code Review Standard
+## 📝 Yang Code Review Standard
 
 Follow the **OWASP Secure Code Review Checklist** to review the code changes. And provide a detailed report of the code changes.
 
@@ -28,7 +28,7 @@ Follow the **OWASP Secure Code Review Checklist** to review the code changes. An
 | 14. Business Logic Security | Ensure that the business logic security are secure. |
 | 15. Monitoring & Incident Response | Ensure that the monitoring and incident response are secure. |
 
-## Free Trial
+## 💰 Free Trial
 
 | Account Type | Client ID | Client Secret | Quota | Input Limit | Output Limit |
 |------------|------------|------------|------------|------------|------------|
@@ -36,7 +36,7 @@ Follow the **OWASP Secure Code Review Checklist** to review the code changes. An
 
 *Note: The quota is reset at 00:00 UTC every day.*
 
-## Models Supported
+## 🤖 Models Supported
 
 | Model Name | Description |
 |------------|-------------|
@@ -44,7 +44,7 @@ Follow the **OWASP Secure Code Review Checklist** to review the code changes. An
 | gpt_oss_120b | GPT-OSS 120B |
 | llama_4_scout_17b_instruct | Llama 4 Scout 17B Instruct |
 
-## Agents Supported
+## 🤖 Agents Supported
 
 | Agent Name | Description |
 |------------|-------------|

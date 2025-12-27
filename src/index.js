@@ -190,10 +190,14 @@ async function run() {
             throw new Error(`Artifact file was not created: ${artifactPath}`);
           }
           
+          core.info(`Uploading artifact from ${process.cwd()}`);
+          core.info(`Files: ${[artifactFileName]}`);
+          
           // Upload artifact - use relative filename from current working directory
           const {id, size} = await artifact.uploadArtifact(
             'yang-code-review',
             [artifactFileName],
+            process.cwd(), // root directory
             {
               retentionDays: 90
             }
@@ -240,10 +244,14 @@ async function run() {
             throw new Error(`Artifact file was not created: ${artifactPath}`);
           }
           
+          core.info(`Uploading artifact from ${process.cwd()}`);
+          core.info(`Files: ${[artifactFileName]}`);
+
           // Upload artifact - use relative filename from current working directory
           const {id, size} = await artifact.uploadArtifact(
             `yang-code-review-pr-${pull_number}`,
             [artifactFileName],
+            process.cwd(), // root directory
             {
               retentionDays: 90
             }

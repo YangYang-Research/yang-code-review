@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { create } from '@actions/artifact';
+import * as artifact from '@actions/artifact';
 import fetch from 'node-fetch';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -168,15 +168,14 @@ async function run() {
       }
 
       // Log the full accumulated content
-      console.log('\n\n=== Full Review Content ===');
+      console.log('\n\n=== Yang Code Review (YCR) Result ===');
       console.log(reviewContent);
 
       // Handle output based on event type
       if (isPushEvent) {
         // Save review as artifact for push events
         try {
-          const artifactName = `code-review-${commitSha.substring(0, 7)}`;
-          const artifactPath = path.join(process.cwd(), 'code-review-result.md');
+          const artifactPath = path.join(process.cwd(), `yang-code-review-${commitSha.substring(0, 7)}.md`);
           
           // Create the review content with metadata
           const artifactContent = `# 🤖 Yang Code Review (YCR)\n\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n${reviewContent}`;
@@ -185,12 +184,15 @@ async function run() {
           fs.writeFileSync(artifactPath, artifactContent, 'utf8');
           
           // Upload artifact
-          const artifactClient = create();
-          await artifactClient.uploadArtifact(artifactName, [artifactPath], process.cwd(), {
-            retentionDays: 90
-          });
+          const {id, size} = await artifact.uploadArtifact(
+            'yang-code-review',
+            [artifactPath],
+            {
+              retentionDays: 90
+            }
+          );
           
-          console.log(`\n✅ Review saved as artifact: ${artifactName}`);
+          console.log(`\n✅ Review saved as artifact: yang-code-review (id: ${id}, bytes: ${size})`);
         } catch (artifactError) {
           core.warning(`Failed to save artifact: ${artifactError.message}`);
           // Don't fail the action if artifact upload fails

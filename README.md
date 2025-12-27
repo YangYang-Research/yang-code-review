@@ -1,27 +1,31 @@
 # 🤖 YangYang Code Review (YCR)
 
-AI-powered GitHub Action that automatically reviews Pull Request code by sending the diff to an external LLM API and posting feedback as a PR comment.
+YangYang Code Review (YCR) for Pull Requests
 
 ## 🛡 Security
 
-- `API_KEY` is **masked automatically** in GitHub Actions logs
+- `CLIENT_ID` and `CLIENT_SECRET` are **masked automatically** in GitHub Actions logs
 
 ## 🔐 Required Secrets
 
-- `API_KEY` – API key for authentication with the YangYang API service
+- `CLIENT_ID` – Client ID for authentication with the YangYang API service
+- `CLIENT_SECRET` – Client secret for authentication with the YangYang API service
 
 ## ⚙️ Inputs
 
 | Name | Required | Description |
 |----|----|----|
-| API_KEY | yes | API key for authentication with the YangYang API service |
-| LLM_MODEL | yes | Name of the LLM model to use for code review |
+| CLIENT_ID | yes | Client ID for authentication with the YangYang API service |
+| CLIENT_SECRET | yes | Client secret for authentication with the YangYang API service |
+| AGENT_NAME | yes | Name of the agent to use for code review |
+| MODEL_NAME | yes | Name of the model to use for code review |
+| MODEL_TEMPERATURE | yes | Temperature for the model |
 | github_token | yes | GitHub token for PR comments |
 
 ## 🚀 Usage Example
 
 ```yaml
-name: Yang Assistant Code Review
+name: YangYang Code Review (YCR)
 
 on:
   pull_request:
@@ -31,11 +35,14 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - uses: yang-org/yang-assistant@v1
+      - uses: yang-org/yang-code-review@v1
         with:
-          API_KEY: ${{ secrets.YANG_API_KEY }}
-          LLM_MODEL: gpt-4
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          CLIENT_ID: ${{ secrets.YANG_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.YANG_CLIENT_SECRET }}
+          AGENT_NAME: 'yang-code-review'
+          MODEL_NAME: 'anthropic_claude_sonet_4_5'
+          MODEL_TEMPERATURE: 0.7
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ## 🏷 Marketplace

@@ -1,7 +1,7 @@
 {
-    "name": "yang-assistant",
+    "name": "yang-code-review",
     "version": "1.0.0",
-    "description": "AI-powered GitHub Action for Pull Request code review",
+    "description": "YangYang Code Review (YCR) for Pull Requests",
     "main": "dist/index.js",
     "scripts": {
         "build": "ncc build src/index.js -o dist"

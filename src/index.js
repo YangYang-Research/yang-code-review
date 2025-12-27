@@ -1,15 +1,24 @@
 import core from '@actions/core';
 import github from '@actions/github';
 import fetch from 'node-fetch';
+import crypto from 'crypto';
 
 async function run() {
   try {
     // Mask sensitive input
-    const apiKey = core.getInput('API_KEY', { required: true });
-    core.setSecret(apiKey);
+    const clientId = core.getInput('CLIENT_ID', { required: true });
+    const clientSecret = core.getInput('CLIENT_SECRET', { required: true });
+    const agentName = core.getInput('AGENT_NAME', { required: true });
+    const modelName = core.getInput('MODEL_NAME', { required: true });
+    const modelTemperature = core.getInput('MODEL_TEMPERATURE', { required: true });
+    const githubToken = core.getInput('GITHUB_TOKEN', { required: true });
 
-    const model = core.getInput('LLM_MODEL', { required: true });
-    const token = core.getInput('github_token', { required: true });
+    const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+
+    core.setSecret(auth);
+    core.setSecret(clientId);
+    core.setSecret(clientSecret);
+    core.setSecret(githubToken);
 
     const context = github.context;
 
@@ -44,49 +53,40 @@ async function run() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
+    const chatSessionId = crypto.randomUUID();
     let apiResponse;
     try {
-      apiResponse = await fetch('https://api.yangyang.ai/invoke', {
+      apiResponse = await fetch('https://yyng.icu/ycr/v1/code-review/completions', {
         method: 'POST',
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
+          'x-yang-auth': `Basic ${auth}`
         },
         body: JSON.stringify({
-          model_name: model,
-          diff_code: diff,
+          chat_session_id: chatSessionId,
+          agent_name: agentName,
+          model_name: modelName,
+          model_temperature: modelTemperature,
+          messages: [
+            {
+              role: 'user',
+              content: diff
+            }
+          ]
         })
       });
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        throw new Error('LLM API request timed out after 15 seconds');
+
+      const result = await apiResponse.text();
+      console.log(result);
+
+      if (!apiResponse.ok) {
+        throw new Error(`LLM API error: ${apiResponse.status} - ${result}`);
       }
-      throw err;
-    } finally {
-      clearTimeout(timeout);
-    }
 
-    if (!apiResponse.ok) {
-      const text = await apiResponse.text();
-      throw new Error(`LLM API error: ${apiResponse.status} - ${text}`);
-    }
-
-    const result = await apiResponse.json();
-    const review = result.review;
-
-    const body = review && review.trim()
-      ? `## 🤖 Yang Assistant Code Review\n\n${review}`
-      : '## ⚠️ Yang Assistant\n\nNo review content was returned by the API.';
-
-    // Post comment to PR
-    await octokit.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: pull_number,
-      body
-    });
-
+    } catch (error) {
+      core.setFailed(error.message);
+    } 
   } catch (error) {
     core.setFailed(error.message);
   }

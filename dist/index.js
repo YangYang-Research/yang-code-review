@@ -39432,7 +39432,11 @@ function fixResponseChunkedTransferBadEnding(request, errorCallback) {
 	});
 }
 
+// EXTERNAL MODULE: external "crypto"
+var external_crypto_ = __nccwpck_require__(6982);
+var external_crypto_default = /*#__PURE__*/__nccwpck_require__.n(external_crypto_);
 ;// CONCATENATED MODULE: ./src/index.js
+
 
 
 
@@ -39440,11 +39444,19 @@ function fixResponseChunkedTransferBadEnding(request, errorCallback) {
 async function run() {
   try {
     // Mask sensitive input
-    const apiKey = core_default().getInput('API_KEY', { required: true });
-    core_default().setSecret(apiKey);
+    const clientId = core_default().getInput('CLIENT_ID', { required: true });
+    const clientSecret = core_default().getInput('CLIENT_SECRET', { required: true });
+    const agentName = core_default().getInput('AGENT_NAME', { required: true });
+    const modelName = core_default().getInput('MODEL_NAME', { required: true });
+    const modelTemperature = core_default().getInput('MODEL_TEMPERATURE', { required: true });
+    const githubToken = core_default().getInput('GITHUB_TOKEN', { required: true });
 
-    const model = core_default().getInput('LLM_MODEL', { required: true });
-    const token = core_default().getInput('github_token', { required: true });
+    const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+
+    core_default().setSecret(auth);
+    core_default().setSecret(clientId);
+    core_default().setSecret(clientSecret);
+    core_default().setSecret(githubToken);
 
     const context = (github_default()).context;
 
@@ -39479,49 +39491,40 @@ async function run() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
+    const chatSessionId = external_crypto_default().randomUUID();
     let apiResponse;
     try {
-      apiResponse = await fetch('https://api.yangyang.ai/invoke', {
+      apiResponse = await fetch('https://yyng.icu/ycr/v1/code-review/completions', {
         method: 'POST',
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
+          'x-yang-auth': `Basic ${auth}`
         },
         body: JSON.stringify({
-          model_name: model,
-          diff_code: diff,
+          chat_session_id: chatSessionId,
+          agent_name: agentName,
+          model_name: modelName,
+          model_temperature: modelTemperature,
+          messages: [
+            {
+              role: 'user',
+              content: diff
+            }
+          ]
         })
       });
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        throw new Error('LLM API request timed out after 15 seconds');
+
+      const result = await apiResponse.text();
+      console.log(result);
+
+      if (!apiResponse.ok) {
+        throw new Error(`LLM API error: ${apiResponse.status} - ${result}`);
       }
-      throw err;
-    } finally {
-      clearTimeout(timeout);
-    }
 
-    if (!apiResponse.ok) {
-      const text = await apiResponse.text();
-      throw new Error(`LLM API error: ${apiResponse.status} - ${text}`);
-    }
-
-    const result = await apiResponse.json();
-    const review = result.review;
-
-    const body = review && review.trim()
-      ? `## 🤖 Yang Assistant Code Review\n\n${review}`
-      : '## ⚠️ Yang Assistant\n\nNo review content was returned by the API.';
-
-    // Post comment to PR
-    await octokit.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: pull_number,
-      body
-    });
-
+    } catch (error) {
+      core_default().setFailed(error.message);
+    } 
   } catch (error) {
     core_default().setFailed(error.message);
   }

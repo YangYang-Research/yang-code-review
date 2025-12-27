@@ -1,16 +1,25 @@
-name: yang-assistant
-description: AI-powered code review for Pull Requests
+name: yang-code-review
+description: YangYang Code Review (YCR) for Pull Requests
 author: yangyang-organization
 
 inputs:
-  API_KEY:
-    description: API key for authentication with the YangYang API service
+  CLIENT_ID:
+    description: Client ID for authentication with the YangYang API service
     required: true
-  LLM_MODEL:
-    description: Name of the LLM model to use for code review
+  CLIENT_SECRET:
+    description: Client secret for authentication with the YangYang API service
     required: true
-  github_token:
-    description: GitHub token used to comment on PR
+  AGENT_NAME:
+    description: Name of the agent to use for code review
+    required: true
+  MODEL_NAME:
+    description: Name of the model to use for code review
+    required: true
+  MODEL_TEMPERATURE:
+    description: Temperature for the model
+    required: true
+  GITHUB_TOKEN:
+    description: GitHub token for PR comments
     required: true
 
 branding:

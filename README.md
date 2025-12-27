@@ -1,4 +1,4 @@
-# 🤖 yang-assistant
+# 🤖 YangYang Code Review (YCR)
 
 AI-powered GitHub Action that automatically reviews Pull Request code by sending the diff to an external LLM API and posting feedback as a PR comment.
 

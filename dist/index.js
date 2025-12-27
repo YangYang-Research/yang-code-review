@@ -37283,10 +37283,8 @@ var __webpack_exports__ = {};
 
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
 var core = __nccwpck_require__(7484);
-var core_default = /*#__PURE__*/__nccwpck_require__.n(core);
 // EXTERNAL MODULE: ./node_modules/@actions/github/lib/github.js
 var github = __nccwpck_require__(3228);
-var github_default = /*#__PURE__*/__nccwpck_require__.n(github);
 ;// CONCATENATED MODULE: external "node:http"
 const external_node_http_namespaceObject = require("node:http");
 ;// CONCATENATED MODULE: external "node:https"
@@ -39444,24 +39442,24 @@ var external_crypto_default = /*#__PURE__*/__nccwpck_require__.n(external_crypto
 async function run() {
   try {
     // Mask sensitive input
-    const clientId = core_default().getInput('CLIENT_ID', { required: true });
-    const clientSecret = core_default().getInput('CLIENT_SECRET', { required: true });
-    const agentName = core_default().getInput('AGENT_NAME', { required: true });
-    const modelName = core_default().getInput('MODEL_NAME', { required: true });
-    const modelTemperature = core_default().getInput('MODEL_TEMPERATURE', { required: true });
-    const githubToken = core_default().getInput('GITHUB_TOKEN', { required: true });
+    const clientId = core.getInput('CLIENT_ID', { required: true });
+    const clientSecret = core.getInput('CLIENT_SECRET', { required: true });
+    const agentName = core.getInput('AGENT_NAME', { required: true });
+    const modelName = core.getInput('MODEL_NAME', { required: true });
+    const modelTemperature = core.getInput('MODEL_TEMPERATURE', { required: true });
+    const githubToken = core.getInput('GITHUB_TOKEN', { required: true });
 
     const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
-    core_default().setSecret(auth);
-    core_default().setSecret(clientId);
-    core_default().setSecret(clientSecret);
-    core_default().setSecret(githubToken);
+    core.setSecret(auth);
+    core.setSecret(clientId);
+    core.setSecret(clientSecret);
+    core.setSecret(githubToken);
 
-    const context = (github_default()).context;
+    const context = github.context;
 
     if (!context.payload.pull_request) {
-      core_default().setFailed('This action can only run on pull_request events');
+      core.setFailed('This action can only run on pull_request events');
       return;
     }
 
@@ -39470,7 +39468,7 @@ async function run() {
     const repo = context.repo.repo;
     const pull_number = pr.number;
 
-    const octokit = github_default().getOctokit(token);
+    const octokit = github.getOctokit(githubToken);
 
     // Fetch PR diff
     const diffResponse = await octokit.request(
@@ -39523,10 +39521,10 @@ async function run() {
       }
 
     } catch (error) {
-      core_default().setFailed(error.message);
+      core.setFailed(error.message);
     } 
   } catch (error) {
-    core_default().setFailed(error.message);
+    core.setFailed(error.message);
   }
 }
 

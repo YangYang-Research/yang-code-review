@@ -32,7 +32,7 @@ Follow the **OWASP Secure Code Review Checklist** to review the code changes. An
 
 | Account Type | Client ID | Client Secret | Quota | Input Limit | Output Limit |
 |------------|------------|------------|------------|------------|------------|
-| Free Trial | zekX2UMXId | 1/P5uT4+S`0-\19/o62m | 25 requests per day | 8000 tokens per request | 5000 tokens per request |
+| Free Trial | zekX2UMXId | 1/P5uT4+S`0-\19/o62m | 25 requests per day | 512 tokens | 4096 tokens |
 
 *Note: The quota is reset at 00:00 UTC every day.*
 

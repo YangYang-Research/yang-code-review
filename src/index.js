@@ -120,12 +120,12 @@ async function run() {
     const chatSessionId = crypto.randomUUID();
     let apiResponse;
     try {
-      apiResponse = await fetch('https://yyng.icu/ycr/v1/code-review/completions', {
+      apiResponse = await fetch('https://yyng.icu/ycr/v1/code-review/github/completions', {
         method: 'POST',
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
-          'x-yang-auth': `Basic ${auth}`,
+          'x-yang-api-token': `Basic ${auth}`,
           'user-agent': 'github-actions/yang-code-review'
         },
         body: JSON.stringify({

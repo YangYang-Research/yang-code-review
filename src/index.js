@@ -120,7 +120,7 @@ async function run() {
     const chatSessionId = crypto.randomUUID();
     let apiResponse;
     try {
-      apiResponse = await fetch('https://yyng.icu/ycr/v1/code-review/github/completions', {
+      apiResponse = await fetch('https://yyng.icu/ycre/v1/code-review/github/completions', {
         method: 'POST',
         signal: controller.signal,
         headers: {

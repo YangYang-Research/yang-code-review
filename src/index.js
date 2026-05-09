@@ -9,18 +9,13 @@ import path from 'path';
 async function run() {
   try {
     // Mask sensitive input
-    const clientId = core.getInput('CLIENT_ID', { required: true });
-    const clientSecret = core.getInput('CLIENT_SECRET', { required: true });
-    const agentName = core.getInput('AGENT_NAME', { required: true });
+    const apiToken = core.getInput('X_YANG_API_TOKEN', { required: true });
+    const agentName = 'yang-code-review';
     const modelName = core.getInput('MODEL_NAME', { required: true });
     const modelTemperature = core.getInput('MODEL_TEMPERATURE', { required: true });
     const githubToken = core.getInput('GITHUB_TOKEN', { required: true });
 
-    const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-
-    core.setSecret(auth);
-    core.setSecret(clientId);
-    core.setSecret(clientSecret);
+    core.setSecret(apiToken);
     core.setSecret(githubToken);
 
     const context = github.context;
@@ -118,6 +113,10 @@ async function run() {
     const timeout = setTimeout(() => controller.abort(), 300000); // 5 minutes for streaming
 
     const chatSessionId = crypto.randomUUID();
+    const parsedTemperature = Number(modelTemperature);
+    if (!Number.isFinite(parsedTemperature) || parsedTemperature < 0 || parsedTemperature > 1) {
+      throw new Error(`MODEL_TEMPERATURE must be a number between 0 and 1. Received: ${modelTemperature}`);
+    }
     let apiResponse;
     try {
       apiResponse = await fetch('https://yyng.icu/ycre/v1/code-review/github/completions', {
@@ -125,18 +124,21 @@ async function run() {
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
-          'x-yang-api-token': `Basic ${auth}`,
+          'x-yang-api-token': apiToken,
           'user-agent': 'github-actions/yang-code-review'
         },
         body: JSON.stringify({
-          chat_session_id: chatSessionId,
-          agent_name: agentName,
           model_name: modelName,
-          temperature: modelTemperature,
+          temperature: parsedTemperature,
           messages: [
             {
               role: 'user',
-              content: diff
+              content: [
+                {
+                  type: 'text',
+                  text: `Repository: ${owner}/${repo}\nEvent: ${context.eventName}\nAgent: ${agentName}\nChat Session: ${chatSessionId}\n\nUnified Diff:\n${diff}`
+                }
+              ]
             }
           ]
         })

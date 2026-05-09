@@ -6,35 +6,25 @@
 
 ---
 
-## 📝 Yang Code Review Standard
+## 📝 Review Process Overview
 
-Follow the **OWASP Secure Code Review Checklist** to review the code changes. And provide a detailed report of the code changes.
+Yang Code Review classifies code context and applies OWASP-standardized checks for multiple domains:
+- OWASP Web Top 10
+- OWASP Mobile Top 10
+- OWASP API Security Top 10
+- OWASP Machine Learning Security Top 10 
+- OWASP IoT Top 10
+- OWASP Top 10 for LLM Applications
+- OWASP MCP Top 10
+- OWASP IaC Security Cheat Sheet
+- OWASP Secure Code Review Checklist
+## Usage
 
-| OWASP Secure Code Review Checklist | Description |
-|------------|------------|
-| 1. Authentication & Session Management | Ensure that the authentication and session management are secure. |
-| 2. Authorization & Access Control | Ensure that the authorization and access control are secure. |
-| 3. Input Validation & Sanitization | Ensure that the input validation and sanitization are secure. |
-| 4. Injection Prevention | Ensure that the injection prevention are secure. |
-| 5. Cryptography & Data Protection | Ensure that the cryptography and data protection are secure. |
-| 6. Error Handling & Logging | Ensure that the error handling and logging are secure. |
-| 7. Cross-Site Scripting (XSS) Prevention | Ensure that the cross-site scripting (XSS) prevention are secure. |
-| 8. Security Headers | Ensure that the security headers are secure. |
-| 9. Dependency Management | Ensure that the dependency management are secure. |
-| 10. Configuration Security | Ensure that the configuration security are secure. |
-| 11. API Security | Ensure that the API security are secure. |
-| 12. File & Resource Management | Ensure that the file and resource management are secure. |
-| 13. Deserialization Security | Ensure that the deserialization security are secure. |
-| 14. Business Logic Security | Ensure that the business logic security are secure. |
-| 15. Monitoring & Incident Response | Ensure that the monitoring and incident response are secure. |
-
-## 💰 Free Trial
-
-| Account Type | Client ID | Client Secret | Quota | Input Limit | Output Limit |
-|------------|------------|------------|------------|------------|------------|
-| Free Trial | zekX2UMXId | 1/P5uT4+S`0-\19/o62m | 25 requests per day | 512 tokens | 4096 tokens |
-
-*Note: The quota is reset at 00:00 UTC every day.*
+1. Create an account on [https://yyng.icu](https://yyng.icu).
+2. Register and activate subscription with Free Plan.
+3. In Studio -> Profile -> Personal Access Tokens, create API credentials.
+4. Copy the full PAT value and save it as repository secret `X_YANG_API_TOKEN`.
+5. Free plan quota and limits are managed by your active Studio entitlement.
 
 ## 🤖 Models Supported
 
@@ -52,17 +42,14 @@ Follow the **OWASP Secure Code Review Checklist** to review the code changes. An
 
 ## 🔐 Required Secrets
 
-- `CLIENT_ID` – Client ID for authentication with the YangYang API service
-- `CLIENT_SECRET` – Client secret for authentication with the YangYang API service
+- `X_YANG_API_TOKEN` – Full value sent in `x-yang-api-token` request header (example: `Basic abcdef...`)
 - `GITHUB_TOKEN` – GitHub token for PR comments
 
 ## ⚙️ Inputs
 
 | Name | Required | Description |
 |----|----|----|
-| CLIENT_ID | yes | Client ID for authentication with the YangYang API service |
-| CLIENT_SECRET | yes | Client secret for authentication with the YangYang API service |
-| AGENT_NAME | yes | Name of the agent to use for code review |
+| X_YANG_API_TOKEN | yes | Token value sent via `x-yang-api-token` header |
 | MODEL_NAME | yes | Name of the model to use for code review |
 | MODEL_TEMPERATURE | yes | Temperature for the model |
 | GITHUB_TOKEN | yes | GitHub token for PR comments |
@@ -88,9 +75,7 @@ jobs:
       - name: yang-code-review
         uses: YangYang-Research/yang-code-review@v1.0.11
         with:
-          CLIENT_ID: ${{ secrets.YANG_CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.YANG_CLIENT_SECRET }}
-          AGENT_NAME: 'yang-code-review'
+          X_YANG_API_TOKEN: ${{ secrets.X_YANG_API_TOKEN }}
           MODEL_NAME: 'anthropic_claude_sonet_4_5'
           MODEL_TEMPERATURE: 0.7
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
@@ -101,33 +86,51 @@ jobs:
 ```markdown
 # Yang Code Review (YCR) Report
 
-**Summary:**
-- Total vulnerabilities found: [count]
+## Scope and Classification
+- Reviewed target: [repo/module/change-set]
+- Detected domain(s): [Web/API/Mobile/ML/IoT/LLM/MCP/IaC]
+- OWASP edition(s) applied: [e.g., Web 2025, API 2023, LLM 2025]
+
+## Executive Summary
+- Total findings: [count]
 - Critical: [count]
 - High: [count]
 - Medium: [count]
 - Low: [count]
 - Info: [count]
+- Top risks:
+  1. [...]
+  2. [...]
+  3. [...]
 
-**Detailed Findings:**
+## Detailed Findings
 
-[SEVERITY] [Vulnerability Type]
-Location: [file:line]
-Description: [detailed explanation]
-Impact: [potential security impact]
-Recommendation: [specific remediation steps]
-Code Example: [if applicable]
+### YCR-001
+- Severity: [Critical|High|Medium|Low|Info]
+- OWASP Mapping: [category + edition]
+- Location: [file:line]
+- Description: [...]
+- Impact: [...]
+- Evidence: [...]
+- Remediation: [...]
+- Secure code example (optional): [...]
 
-## OWASP Secure Code Review Checklist
+## Checklist
+- [ ] Domain-specific OWASP checks completed
+- [ ] OWASP Secure Code Review Checklist core areas covered
+- [ ] IaC Security Cheat Sheet controls applied (if IaC in scope)
 
-[Detail OWASP Secure Code Review Checklist](https://owasp.org/www-project-secure-coding-practices-quick-reference-guide/)
+## Residual Risk and Verification Gaps
+- Not fully verified: [...]
+- Recommended follow-up tests: [...]
 
 ### Report Generated by Yang Code Review (YCR) - YangYang Organization
 ```
 
 ## 🛡 Security
 
-- `CLIENT_ID`, `CLIENT_SECRET`, `GITHUB_TOKEN` are **masked automatically** in GitHub Actions logs
+- `X_YANG_API_TOKEN`, `GITHUB_TOKEN` are **masked automatically** in GitHub Actions logs
+- Keep `X_YANG_API_TOKEN` in GitHub Secrets only; never print or commit it.
 
 ## 🏷 Marketplace
 

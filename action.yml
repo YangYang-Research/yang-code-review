@@ -3,14 +3,8 @@ description: YangYang Code Review (YCR)
 author: yangyang-organization
 
 inputs:
-  CLIENT_ID:
-    description: Client ID for authentication with the YangYang API service
-    required: true
-  CLIENT_SECRET:
-    description: Client secret for authentication with the YangYang API service
-    required: true
-  AGENT_NAME:
-    description: Name of the agent to use for code review
+  X_YANG_API_TOKEN:
+    description: Full token value sent as x-yang-api-token header
     required: true
   MODEL_NAME:
     description: Name of the model to use for code review

@@ -9,15 +9,16 @@ on:
 jobs:
   code-review:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
       - name: yang-code-review
         uses: yangyang-research/yang-code-review@v1.0.12
         with:
           X_YANG_API_TOKEN: ${{ secrets.X_YANG_API_TOKEN }}
           MODEL_NAME: 'anthropic_claude_sonet_4_5'
           MODEL_TEMPERATURE: 0.7
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          GITHUB_TOKEN: ${{ github.token }}
 

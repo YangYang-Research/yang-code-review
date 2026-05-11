@@ -42,14 +42,13 @@ Yang Code Review classifies code context and applies OWASP-standardized checks f
 
 ## 🔐 Required Secrets
 
-- `X_YANG_API_TOKEN` – Full value sent in `x-yang-api-token` request header (example: `Basic abcdef...`)
-- `GITHUB_TOKEN` – GitHub token for PR comments
+- `X_YANG_API_TOKEN` – Raw API token value (do not prepend `Basic`; action will send `x-yang-api-token: Basic <token>`)
 
 ## ⚙️ Inputs
 
 | Name | Required | Description |
 |----|----|----|
-| X_YANG_API_TOKEN | yes | Token value sent via `x-yang-api-token` header |
+| X_YANG_API_TOKEN | yes | Raw token used to build `x-yang-api-token: Basic <token>` header |
 | MODEL_NAME | yes | Name of the model to use for code review |
 | MODEL_TEMPERATURE | yes | Temperature for the model |
 | GITHUB_TOKEN | yes | GitHub token for PR comments |
@@ -68,17 +67,18 @@ on:
 jobs:
   code-review:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
       - name: yang-code-review
-        uses: YangYang-Research/yang-code-review@v1.0.12
+        uses: YangYang-Research/yang-code-review@<version>
         with:
           X_YANG_API_TOKEN: ${{ secrets.X_YANG_API_TOKEN }}
           MODEL_NAME: 'anthropic_claude_sonet_4_5'
           MODEL_TEMPERATURE: 0.7
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          GITHUB_TOKEN: ${{ github.token }}
 ```
 
 ## Report Template

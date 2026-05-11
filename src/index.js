@@ -143,7 +143,7 @@ async function run() {
           signal: controller.signal,
           headers: {
             'Content-Type': 'application/json',
-            'x-yang-api-token': apiToken,
+            'x-yang-api-token': `Basic ${apiToken}`,
             'user-agent': 'github-actions/yang-code-review'
           },
           body: JSON.stringify({

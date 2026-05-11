@@ -73,7 +73,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: yang-code-review
-        uses: YangYang-Research/yang-code-review@v1.0.11
+        uses: YangYang-Research/yang-code-review@v1.0.12
         with:
           X_YANG_API_TOKEN: ${{ secrets.X_YANG_API_TOKEN }}
           MODEL_NAME: 'anthropic_claude_sonet_4_5'

@@ -15,7 +15,7 @@ jobs:
       issues: write
     steps:
       - name: yang-code-review
-        uses: yangyang-research/yang-code-review@v1.0.12
+        uses: yangyang-research/yang-code-review@main
         with:
           X_YANG_API_TOKEN: ${{ secrets.X_YANG_API_TOKEN }}
           MODEL_NAME: 'anthropic_claude_sonet_4_5'

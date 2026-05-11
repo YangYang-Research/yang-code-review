@@ -139895,6 +139895,21 @@ var external_path_default = /*#__PURE__*/__nccwpck_require__.n(external_path_);
 
 
 
+function isCloudflareBlockedResponse(text) {
+  if (!text) {
+    return false;
+  }
+  return (
+    text.includes('Just a moment...') ||
+    text.includes('_cf_chl_opt') ||
+    text.includes('challenge-platform')
+  );
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function run() {
   try {
     // Mask sensitive input
@@ -140007,56 +140022,69 @@ async function run() {
       throw new Error(`MODEL_TEMPERATURE must be a number between 0 and 1. Received: ${modelTemperature}`);
     }
     let apiResponse;
+    let reviewContent;
     try {
-      apiResponse = await fetch('https://yyng.icu/ycre/v1/code-review/github/completions', {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-yang-api-token': apiToken,
-          'user-agent': 'github-actions/yang-code-review'
-        },
-        body: JSON.stringify({
-          model_name: modelName,
-          temperature: parsedTemperature,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `Repository: ${owner}/${repo}\nEvent: ${context.eventName}\nAgent: ${agentName}\nChat Session: ${chatSessionId}\n\nUnified Diff:\n${diff}`
-                }
-              ]
-            }
-          ]
-        })
-      });
+      const maxAttempts = 3;
+      let lastError = null;
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        apiResponse = await fetch('https://api.yyng.icu/ycre/v1/code-review/github/completions', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-yang-api-token': apiToken,
+            'user-agent': 'github-actions/yang-code-review'
+          },
+          body: JSON.stringify({
+            model_name: modelName,
+            temperature: parsedTemperature,
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'text',
+                    text: `Repository: ${owner}/${repo}\nEvent: ${context.eventName}\nAgent: ${agentName}\nChat Session: ${chatSessionId}\n\nUnified Diff:\n${diff}`
+                  }
+                ]
+              }
+            ]
+          })
+        });
+
+        const responseText = await apiResponse.text();
+        if (!apiResponse.ok) {
+          if (isCloudflareBlockedResponse(responseText)) {
+            lastError = new Error('API request was blocked by Cloudflare protection. The API endpoint may be temporarily unavailable or require additional authentication.');
+          } else {
+            lastError = new Error(`YangYang API error: ${apiResponse.status} - ${responseText.substring(0, 500)}`);
+          }
+        } else if (isCloudflareBlockedResponse(responseText)) {
+          lastError = new Error('API request was blocked by Cloudflare protection. The API endpoint may be temporarily unavailable or require additional authentication.');
+        } else if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
+          lastError = new Error('API returned HTML instead of expected response. This may indicate the request was blocked or redirected.');
+        } else if (!responseText || responseText.trim().length === 0) {
+          lastError = new Error('Received empty response from YangYang API');
+        } else {
+          reviewContent = responseText;
+          lastError = null;
+          break;
+        }
+
+        if (attempt < maxAttempts) {
+          core.warning(`YangYang API attempt ${attempt}/${maxAttempts} failed: ${lastError.message}. Retrying...`);
+          await sleep(attempt * 5000);
+        }
+      }
 
       clearTimeout(timeout);
 
-      if (!apiResponse.ok) {
-        // For error responses, read as text to check for Cloudflare challenges
-        const errorText = await apiResponse.text();
-        if (errorText.includes('Just a moment...') || errorText.includes('_cf_chl_opt') || errorText.includes('challenge-platform')) {
-          throw new Error('API request was blocked by Cloudflare protection. The API endpoint may be temporarily unavailable or require additional authentication.');
+      if (lastError) {
+        if (lastError.message.includes('Cloudflare protection')) {
+          core.warning(`${lastError.message} Skipping code review for this run.`);
+          return;
         }
-        throw new Error(`YangYang API error: ${apiResponse.status} - ${errorText.substring(0, 500)}`);
-      }
-
-      // Handle response like test.js example
-      const reviewContent = await apiResponse.text();
-      
-      // Check for Cloudflare challenge or HTML responses
-      if (reviewContent.includes('Just a moment...') || reviewContent.includes('_cf_chl_opt') || reviewContent.includes('challenge-platform')) {
-        throw new Error('API request was blocked by Cloudflare protection. The API endpoint may be temporarily unavailable or require additional authentication.');
-      }
-      if (reviewContent.trim().startsWith('<!DOCTYPE') || reviewContent.trim().startsWith('<html')) {
-        throw new Error('API returned HTML instead of expected response. This may indicate the request was blocked or redirected.');
-      }
-      
-      if (!reviewContent || reviewContent.trim().length === 0) {
-        throw new Error('Received empty response from YangYang API');
+        throw lastError;
       }
 
       // Log the full accumulated content

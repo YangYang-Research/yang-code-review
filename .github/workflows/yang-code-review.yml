@@ -17,9 +17,9 @@ jobs:
       - name: yang-code-review
         uses: yangyang-research/yang-code-review@main
         with:
-          PROVIDER: openai
-          API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          MODEL_NAME: gpt-5.4
+          PROVIDER: nvidia
+          API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          MODEL_NAME: meta/llama-3.1-8b-instruct
           MODEL_TEMPERATURE: 0.2
           GITHUB_TOKEN: ${{ github.token }}
 

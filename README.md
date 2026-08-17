@@ -20,37 +20,39 @@ Yang Code Review classifies code context and applies OWASP-standardized checks f
 - OWASP Secure Code Review Checklist
 ## Usage
 
-1. Create an account on [https://yyng.icu](https://yyng.icu).
-2. Register and activate subscription with Free Plan.
-3. In Studio -> Profile -> Personal Access Tokens, create API credentials.
-4. Copy the full PAT value and save it as repository secret `X_YANG_API_TOKEN`.
-5. Free plan quota and limits are managed by your active Studio entitlement.
+1. Create an API key with one of the supported AI providers.
+2. Save it as a GitHub Actions repository secret.
+3. Configure `PROVIDER`, `API_KEY`, and `MODEL_NAME` in the action step.
 
-## 🤖 Models Supported
+YCR calls the selected provider directly. No Yang API account, token, or proxy is
+used.
 
-| Model Name | Description |
-|------------|-------------|
-| anthropic_claude_sonet_4_5 | Claude Sonet 4.5 |
-| gpt_oss_120b | GPT-OSS 120B |
-| llama_4_scout_17b_instruct | Llama 4 Scout 17B Instruct |
+## 🤖 Providers Supported
 
-## 🤖 Agents Supported
+Provider base URLs are hardcoded in the action:
 
-| Agent Name | Description |
-|------------|-------------|
-| yang-code-review | YangYang Code Review |
+| Provider | Base URL | Models |
+|----------|----------|--------|
+| `openai` | `https://api.openai.com/v1` | [Models](https://developers.openai.com/api/docs/models) |
+| `anthropic` | `https://api.anthropic.com/v1` | [Models](https://platform.claude.com/docs/en/about-claude/models) |
+| `google` | `https://generativelanguage.googleapis.com/v1beta` | [Models](https://ai.google.dev/gemini-api/docs/models) |
+| `nvidia` | `https://integrate.api.nvidia.com/v1` | [Models](https://build.nvidia.com/models) |
+| `openrouter` | `https://openrouter.ai/api/v1` | [Models](https://openrouter.ai/models) |
 
 ## 🔐 Required Secrets
 
-- `X_YANG_API_TOKEN` – Raw API token value (do not prepend `Basic`; action will send `x-yang-api-token: Basic <token>`)
+- `API_KEY` — key for the selected provider
+- `GITHUB_TOKEN` — GitHub token used to read changes and post PR comments
 
 ## ⚙️ Inputs
 
 | Name | Required | Description |
 |----|----|----|
-| X_YANG_API_TOKEN | yes | Raw token used to build `x-yang-api-token: Basic <token>` header |
-| MODEL_NAME | yes | Name of the model to use for code review |
-| MODEL_TEMPERATURE | yes | Temperature for the model |
+| PROVIDER | yes | `openai`, `anthropic`, `google`, `nvidia`, or `openrouter` |
+| API_KEY | yes | Provider API key |
+| MODEL_NAME | yes | Provider model identifier |
+| MODEL_TEMPERATURE | no | Temperature from 0 to 1; omitted by default for model compatibility |
+| MAX_TOKENS | no | Maximum output tokens; default `4096` |
 | GITHUB_TOKEN | yes | GitHub token for PR comments |
 
 ## 🚀 Usage Example
@@ -75,10 +77,53 @@ jobs:
       - name: yang-code-review
         uses: YangYang-Research/yang-code-review@<version>
         with:
-          X_YANG_API_TOKEN: ${{ secrets.X_YANG_API_TOKEN }}
-          MODEL_NAME: 'anthropic_claude_sonet_4_5'
-          MODEL_TEMPERATURE: 0.7
+          PROVIDER: openai
+          API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          MODEL_NAME: gpt-5.4
+          MODEL_TEMPERATURE: 0.2
           GITHUB_TOKEN: ${{ github.token }}
+```
+
+### Provider examples
+
+Anthropic:
+
+```yaml
+with:
+  PROVIDER: anthropic
+  API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  MODEL_NAME: claude-sonnet-4-5
+  GITHUB_TOKEN: ${{ github.token }}
+```
+
+Google Gemini:
+
+```yaml
+with:
+  PROVIDER: google
+  API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  MODEL_NAME: gemini-2.5-pro
+  GITHUB_TOKEN: ${{ github.token }}
+```
+
+NVIDIA NIM:
+
+```yaml
+with:
+  PROVIDER: nvidia
+  API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+  MODEL_NAME: meta/llama
+  GITHUB_TOKEN: ${{ github.token }}
+```
+
+OpenRouter:
+
+```yaml
+with:
+  PROVIDER: openrouter
+  API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+  MODEL_NAME: openai/gpt-5.2
+  GITHUB_TOKEN: ${{ github.token }}
 ```
 
 ## Report Template
@@ -129,8 +174,10 @@ jobs:
 
 ## 🛡 Security
 
-- `X_YANG_API_TOKEN`, `GITHUB_TOKEN` are **masked automatically** in GitHub Actions logs
-- Keep `X_YANG_API_TOKEN` in GitHub Secrets only; never print or commit it.
+- `API_KEY` and `GITHUB_TOKEN` are masked automatically in GitHub Actions logs.
+- Keep provider keys in GitHub Secrets only; never print or commit them.
+- The code diff is sent directly to the selected provider. Review that
+  provider's data retention policy before enabling the action on private code.
 
 ## 🏷 Marketplace
 

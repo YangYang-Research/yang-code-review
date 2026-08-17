@@ -3,15 +3,22 @@ description: YangYang Code Review (YCR)
 author: yangyang-organization
 
 inputs:
-  X_YANG_API_TOKEN:
-    description: Full token value sent as x-yang-api-token header
+  PROVIDER:
+    description: AI provider (openai, anthropic, google, nvidia, or openrouter)
+    required: true
+  API_KEY:
+    description: API key for the selected provider
     required: true
   MODEL_NAME:
-    description: Name of the model to use for code review
+    description: Provider model identifier
     required: true
   MODEL_TEMPERATURE:
-    description: Temperature for the model
-    required: true
+    description: Optional model temperature between 0 and 1; omitted by default for model compatibility
+    required: false
+  MAX_TOKENS:
+    description: Maximum number of output tokens
+    required: false
+    default: "4096"
   GITHUB_TOKEN:
     description: GitHub token for PR comments
     required: true

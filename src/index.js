@@ -1,37 +1,28 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 import {DefaultArtifactClient} from '@actions/artifact';
-import fetch from 'node-fetch';
-import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-
-function isCloudflareBlockedResponse(text) {
-  if (!text) {
-    return false;
-  }
-  return (
-    text.includes('Just a moment...') ||
-    text.includes('_cf_chl_opt') ||
-    text.includes('challenge-platform')
-  );
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import {requestReview, resolveProviderConfig} from './providers.js';
+import {buildReviewMessages} from './prompt.js';
 
 async function run() {
   try {
     // Mask sensitive input
-    const apiToken = core.getInput('X_YANG_API_TOKEN', { required: true });
-    const agentName = 'yang-code-review';
+    const provider = core.getInput('PROVIDER', {required: true});
+    const apiKey = core.getInput('API_KEY', {required: true});
     const modelName = core.getInput('MODEL_NAME', { required: true });
-    const modelTemperature = core.getInput('MODEL_TEMPERATURE', { required: true });
+    const modelTemperature = core.getInput('MODEL_TEMPERATURE');
+    const maxTokens = core.getInput('MAX_TOKENS') || '4096';
     const githubToken = core.getInput('GITHUB_TOKEN', { required: true });
 
-    core.setSecret(apiToken);
+    core.setSecret(apiKey);
     core.setSecret(githubToken);
+
+    const providerConfig = resolveProviderConfig({
+      provider,
+      apiKey
+    });
 
     const context = github.context;
     const owner = context.repo.owner;
@@ -123,80 +114,39 @@ async function run() {
       return;
     }
 
-    // Call YangYang API with timeout (increased for streaming responses)
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 300000); // 5 minutes for streaming
-
-    const chatSessionId = crypto.randomUUID();
-    const parsedTemperature = Number(modelTemperature);
-    if (!Number.isFinite(parsedTemperature) || parsedTemperature < 0 || parsedTemperature > 1) {
+    const parsedTemperature =
+      modelTemperature === '' ? undefined : Number(modelTemperature);
+    if (
+      parsedTemperature !== undefined &&
+      (!Number.isFinite(parsedTemperature) ||
+        parsedTemperature < 0 ||
+        parsedTemperature > 1)
+    ) {
       throw new Error(`MODEL_TEMPERATURE must be a number between 0 and 1. Received: ${modelTemperature}`);
     }
-    let apiResponse;
-    let reviewContent;
+    const parsedMaxTokens = Number(maxTokens);
+    if (!Number.isInteger(parsedMaxTokens) || parsedMaxTokens < 1) {
+      throw new Error(`MAX_TOKENS must be a positive integer. Received: ${maxTokens}`);
+    }
+
     try {
-      const maxAttempts = 3;
-      let lastError = null;
-      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-        apiResponse = await fetch('https://api.yyng.icu/ycre/v1/code-review/github/completions', {
-          method: 'POST',
-          signal: controller.signal,
-          headers: {
-            'Content-Type': 'application/json',
-            'x-yang-api-token': `Basic ${apiToken}`,
-            'user-agent': 'github-actions/yang-code-review'
-          },
-          body: JSON.stringify({
-            model_name: modelName,
-            temperature: parsedTemperature,
-            messages: [
-              {
-                role: 'user',
-                content: [
-                  {
-                    type: 'text',
-                    text: `Repository: ${owner}/${repo}\nEvent: ${context.eventName}\nAgent: ${agentName}\nChat Session: ${chatSessionId}\n\nUnified Diff:\n${diff}`
-                  }
-                ]
-              }
-            ]
-          })
-        });
-
-        const responseText = await apiResponse.text();
-        if (!apiResponse.ok) {
-          if (isCloudflareBlockedResponse(responseText)) {
-            lastError = new Error('API request was blocked by Cloudflare protection. The API endpoint may be temporarily unavailable or require additional authentication.');
-          } else {
-            lastError = new Error(`YangYang API error: ${apiResponse.status} - ${responseText.substring(0, 500)}`);
-          }
-        } else if (isCloudflareBlockedResponse(responseText)) {
-          lastError = new Error('API request was blocked by Cloudflare protection. The API endpoint may be temporarily unavailable or require additional authentication.');
-        } else if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
-          lastError = new Error('API returned HTML instead of expected response. This may indicate the request was blocked or redirected.');
-        } else if (!responseText || responseText.trim().length === 0) {
-          lastError = new Error('Received empty response from YangYang API');
-        } else {
-          reviewContent = responseText;
-          lastError = null;
-          break;
+      const reviewContent = await requestReview({
+        config: providerConfig,
+        model: modelName,
+        temperature: parsedTemperature,
+        maxTokens: parsedMaxTokens,
+        messages: buildReviewMessages({
+          owner,
+          repo,
+          eventName: context.eventName,
+          diff
+        }),
+        onRetry: (attempt, attempts, error) => {
+          core.warning(
+            `${providerConfig.name} attempt ${attempt}/${attempts} failed: ${error.message}. Retrying...`
+          );
         }
-
-        if (attempt < maxAttempts) {
-          core.warning(`YangYang API attempt ${attempt}/${maxAttempts} failed: ${lastError.message}. Retrying...`);
-          await sleep(attempt * 5000);
-        }
-      }
-
-      clearTimeout(timeout);
-
-      if (lastError) {
-        if (lastError.message.includes('Cloudflare protection')) {
-          core.warning(`${lastError.message} Skipping code review for this run.`);
-          return;
-        }
-        throw lastError;
-      }
+      });
 
       // Log the full accumulated content
       console.log('\n\n=== Yang Code Review (YCR) Result ===');
@@ -295,7 +245,6 @@ async function run() {
       }
 
     } catch (error) {
-      clearTimeout(timeout);
       core.setFailed(error.message);
     } 
   } catch (error) {

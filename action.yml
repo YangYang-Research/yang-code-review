@@ -4,7 +4,7 @@ author: yangyang-organization
 
 inputs:
   PROVIDER:
-    description: AI provider (openai, anthropic, google, nvidia, or openrouter)
+    description: AI provider (openai, anthropic, google, nvidia, openrouter, or yangyang)
     required: true
   API_KEY:
     description: API key for the selected provider

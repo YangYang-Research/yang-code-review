@@ -24,8 +24,9 @@ Yang Code Review classifies code context and applies OWASP-standardized checks f
 2. Save it as a GitHub Actions repository secret.
 3. Configure `PROVIDER`, `API_KEY`, and `MODEL_NAME` in the action step.
 
-YCR calls the selected provider directly. No Yang API account, token, or proxy is
-used.
+YCR calls the selected provider directly. `yangyang` calls
+`https://inference.yyng.icu/v1/chat/completions` and sends `API_KEY` as
+`x-yang-api-token`.
 
 ## 🤖 Providers Supported
 
@@ -38,6 +39,7 @@ Provider base URLs are hardcoded in the action:
 | `google` | `https://generativelanguage.googleapis.com/v1beta` | [Models](https://ai.google.dev/gemini-api/docs/models) |
 | `nvidia` | `https://integrate.api.nvidia.com/v1` | [Models](https://build.nvidia.com/models) |
 | `openrouter` | `https://openrouter.ai/api/v1` | [Models](https://openrouter.ai/models) |
+| `yangyang` | `https://inference.yyng.icu/v1` | `auto` |
 
 ## 🔐 Required Secrets
 
@@ -48,9 +50,9 @@ Provider base URLs are hardcoded in the action:
 
 | Name | Required | Description |
 |----|----|----|
-| PROVIDER | yes | `openai`, `anthropic`, `google`, `nvidia`, or `openrouter` |
+| PROVIDER | yes | `openai`, `anthropic`, `google`, `nvidia`, `openrouter`, or `yangyang` |
 | API_KEY | yes | Provider API key |
-| MODEL_NAME | yes | Provider model identifier |
+| MODEL_NAME | yes | Provider model identifier. `yangyang` uses `auto` |
 | MODEL_TEMPERATURE | no | Temperature from 0 to 1; omitted by default for model compatibility |
 | MAX_TOKENS | no | Maximum output tokens; default `4096` |
 | GITHUB_TOKEN | yes | GitHub token for PR comments |
@@ -125,6 +127,18 @@ with:
   MODEL_NAME: openai/gpt-5.2
   GITHUB_TOKEN: ${{ github.token }}
 ```
+
+YangYang Inference:
+
+```yaml
+with:
+  PROVIDER: yangyang
+  API_KEY: ${{ secrets.YANG_API_TOKEN }}
+  MODEL_NAME: auto
+  GITHUB_TOKEN: ${{ github.token }}
+```
+
+`API_KEY` is sent as `x-yang-api-token` to `https://inference.yyng.icu/v1/chat/completions`.
 
 ## Report Template
 

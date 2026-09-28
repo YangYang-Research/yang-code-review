@@ -47,6 +47,13 @@ test('resolves hardcoded provider base URLs', () => {
     apiKey: 'secret'
   });
   assert.equal(openrouter.baseUrl, 'https://openrouter.ai/api/v1');
+
+  const yangyang = resolveProviderConfig({
+    provider: 'yangyang',
+    apiKey: 'secret'
+  });
+  assert.equal(yangyang.baseUrl, 'https://inference.yyng.icu/v1');
+  assert.equal(yangyang.protocol, 'openai');
 });
 
 test('rejects unsupported providers and missing keys', () => {
@@ -155,4 +162,41 @@ test('sends an OpenAI-compatible request and returns review text', async () => {
     'https://integrate.api.nvidia.com/v1/chat/completions'
   );
   assert.equal(captured.options.headers.authorization, 'Bearer secret');
+});
+
+test('authenticates YangYang inference with x-yang-api-token', async () => {
+  const config = resolveProviderConfig({
+    provider: 'yangyang',
+    apiKey: 'yang-token'
+  });
+  let captured;
+  const fetchImpl = async (url, options) => {
+    captured = {url, options};
+    return {
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({choices: [{message: {content: 'Yang review'}}]})
+    };
+  };
+
+  const result = await requestReview({
+    config,
+    model: 'yang-model',
+    temperature: 0.2,
+    maxTokens: 1000,
+    messages,
+    fetchImpl
+  });
+
+  assert.equal(result, 'Yang review');
+  assert.equal(
+    captured.url,
+    'https://inference.yyng.icu/v1/chat/completions'
+  );
+  assert.equal(captured.options.headers['x-yang-api-token'], 'yang-token');
+  assert.equal(captured.options.headers.authorization, undefined);
+  const body = JSON.parse(captured.options.body);
+  assert.equal(body.max_tokens, 1000);
+  assert.equal(body.stream, false);
 });

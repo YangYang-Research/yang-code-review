@@ -20,6 +20,10 @@ const PROVIDERS = {
   openrouter: {
     baseUrl: 'https://openrouter.ai/api/v1',
     protocol: 'openai'
+  },
+  yangyang: {
+    baseUrl: 'https://inference.yyng.icu/v1',
+    protocol: 'openai'
   }
 };
 
@@ -56,7 +60,9 @@ function createOpenAIRequest(config, {model, temperature, maxTokens, messages}) 
     'content-type': 'application/json',
     'user-agent': 'github-actions/yang-code-review'
   };
-  if (config.apiKey) {
+  if (config.apiKey && config.name === 'yangyang') {
+    headers['x-yang-api-token'] = config.apiKey;
+  } else if (config.apiKey) {
     headers.authorization = `Bearer ${config.apiKey}`;
   }
   if (config.name === 'openrouter') {

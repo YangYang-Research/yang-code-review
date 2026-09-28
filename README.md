@@ -24,10 +24,6 @@ Yang Code Review classifies code context and applies OWASP-standardized checks f
 2. Save it as a GitHub Actions repository secret.
 3. Configure `PROVIDER`, `API_KEY`, and `MODEL_NAME` in the action step.
 
-YCR calls the selected provider directly. `yangyang` calls
-`https://inference.yyng.icu/v1/chat/completions` and sends `API_KEY` as
-`x-yang-api-token`.
-
 ## 🤖 Providers Supported
 
 Provider base URLs are hardcoded in the action:

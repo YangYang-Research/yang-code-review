@@ -134,8 +134,6 @@ with:
   GITHUB_TOKEN: ${{ github.token }}
 ```
 
-`API_KEY` is sent as `x-yang-api-token` to `https://inference.yyng.icu/v1/chat/completions`.
-
 ## Report Template
 
 ```markdown

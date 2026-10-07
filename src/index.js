@@ -130,16 +130,20 @@ async function run() {
     }
 
     try {
+      const useYangyangAgent = providerConfig.name === 'yangyang';
       const reviewContent = await requestReview({
         config: providerConfig,
         model: modelName,
         temperature: parsedTemperature,
         maxTokens: parsedMaxTokens,
+        agent: useYangyangAgent ? 'yang-code-review' : undefined,
         messages: buildReviewMessages({
           owner,
           repo,
           eventName: context.eventName,
-          diff
+          diff,
+          // YangYang /v1/agents loads system prompt from agents.yang-code-review.
+          includeSystem: !useYangyangAgent
         }),
         onRetry: (attempt, attempts, error) => {
           core.warning(

@@ -192,11 +192,12 @@ test('authenticates YangYang inference with x-yang-api-token', async () => {
   assert.equal(result, 'Yang review');
   assert.equal(
     captured.url,
-    'https://inference.yyng.icu/v1/chat/completions'
+    'https://inference.yyng.icu/v1/agents'
   );
   assert.equal(captured.options.headers['x-yang-api-token'], 'yang-token');
   assert.equal(captured.options.headers.authorization, undefined);
   const body = JSON.parse(captured.options.body);
   assert.equal(body.max_tokens, 1000);
   assert.equal(body.stream, false);
+  assert.equal(body.agent, 'yang-code-review');
 });

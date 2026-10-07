@@ -35,7 +35,7 @@ Provider base URLs are hardcoded in the action:
 | `google` | `https://generativelanguage.googleapis.com/v1beta` | [Models](https://ai.google.dev/gemini-api/docs/models) |
 | `nvidia` | `https://integrate.api.nvidia.com/v1` | [Models](https://build.nvidia.com/models) |
 | `openrouter` | `https://openrouter.ai/api/v1` | [Models](https://openrouter.ai/models) |
-| `yangyang` | `https://inference.yyng.icu/v1` | `auto` |
+| `yangyang` | `https://inference.yyng.icu/v1/agents` (`agent=yang-code-review`) | `auto` |
 
 ## 🔐 Required Secrets
 

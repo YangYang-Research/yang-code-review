@@ -55,7 +55,7 @@ export function resolveProviderConfig({provider, apiKey}) {
   };
 }
 
-function createOpenAIRequest(config, {model, temperature, maxTokens, messages}) {
+function createOpenAIRequest(config, {model, temperature, maxTokens, messages, agent}) {
   const headers = {
     'content-type': 'application/json',
     'user-agent': 'github-actions/yang-code-review'
@@ -82,9 +82,13 @@ function createOpenAIRequest(config, {model, temperature, maxTokens, messages}) 
   } else {
     body.max_tokens = maxTokens;
   }
+  if (config.name === 'yangyang') {
+    body.agent = agent || 'yang-code-review';
+  }
 
+  const path = config.name === 'yangyang' ? '/agents' : '/chat/completions';
   return {
-    url: `${config.baseUrl}/chat/completions`,
+    url: `${config.baseUrl}${path}`,
     headers,
     body
   };
@@ -160,7 +164,10 @@ export function createProviderRequest(config, options) {
   if (config.protocol === 'google') {
     return createGoogleRequest(config, options);
   }
-  return createOpenAIRequest(config, options);
+  return createOpenAIRequest(config, {
+    ...options,
+    agent: options.agent || (config.name === 'yangyang' ? 'yang-code-review' : undefined)
+  });
 }
 
 function extractTextParts(parts) {
@@ -207,6 +214,7 @@ export async function requestReview({
   temperature,
   maxTokens,
   messages,
+  agent,
   timeoutMs = 300000,
   maxAttempts = 3,
   fetchImpl = fetch,
@@ -216,7 +224,8 @@ export async function requestReview({
     model,
     temperature,
     maxTokens,
-    messages
+    messages,
+    agent
   });
   let lastError;
 

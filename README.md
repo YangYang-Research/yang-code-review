@@ -8,16 +8,16 @@
 
 ## 📝 Review Process Overview
 
-Yang Code Review classifies code context and applies OWASP-standardized checks for multiple domains:
+Yang Code Review first classifies the change domain, then applies the matching OWASP catalog(s):
 - OWASP Web Top 10
 - OWASP Mobile Top 10
 - OWASP API Security Top 10
-- OWASP Machine Learning Security Top 10 
+- OWASP Machine Learning Security Top 10
 - OWASP IoT Top 10
 - OWASP Top 10 for LLM Applications
 - OWASP MCP Top 10
 - OWASP IaC Security Cheat Sheet
-- OWASP Secure Code Review Checklist
+
 ## Usage
 
 1. Create an API key with one of the supported AI providers.
@@ -167,11 +167,6 @@ with:
 - Evidence: [...]
 - Remediation: [...]
 - Secure code example (optional): [...]
-
-## Checklist
-- [ ] Domain-specific OWASP checks completed
-- [ ] OWASP Secure Code Review Checklist core areas covered
-- [ ] IaC Security Cheat Sheet controls applied (if IaC in scope)
 
 ## Residual Risk and Verification Gaps
 - Not fully verified: [...]

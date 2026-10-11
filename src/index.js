@@ -7,8 +7,10 @@ import {buildReviewMessages} from './prompt.js';
 import {
   buildArtifactName,
   buildSarif,
+  formatDependabotStyleComment,
   parseFindings,
-  reportDateStamp
+  reportDateStamp,
+  resolveFindingPath
 } from './sarif.js';
 
 async function run() {
@@ -171,8 +173,12 @@ async function run() {
         ? `# 🤖 Yang Code Review (YCR)\n\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n`
         : `# 🤖 Yang Code Review (YCR)\n\n**Pull Request:** #${pullNumber}\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n`;
 
-      const findings = parseFindings(reviewContent);
-      // Anchor missing locations to README (always in tree) so code scanning accepts SARIF.
+      const findings = parseFindings(reviewContent).map((f) => ({
+        ...f,
+        file: resolveFindingPath(f.file, (p) =>
+          fs.existsSync(path.resolve(process.cwd(), p))
+        )
+      }));
       const sarif = buildSarif({
         findings,
         reportText: reviewContent,
@@ -181,8 +187,12 @@ async function run() {
         commitSha,
         fallbackUri: 'README.md'
       });
+      const commentBody = formatDependabotStyleComment(findings, {
+        reportText: reviewContent
+      });
+      const artifactBody = `${header}${commentBody}\n\n---\n\n## Full model report\n\n${reviewContent}\n`;
 
-      fs.writeFileSync(mdPath, `${header}${reviewContent}`, 'utf8');
+      fs.writeFileSync(mdPath, artifactBody, 'utf8');
       fs.writeFileSync(sarifPath, `${JSON.stringify(sarif, null, 2)}\n`, 'utf8');
       core.setOutput('sarif_path', sarifPath);
       core.setOutput('md_path', mdPath);
@@ -195,7 +205,7 @@ async function run() {
             owner,
             repo,
             issue_number: pullNumber,
-            body: `## 🤖 Yang Code Review (YCR)\n\n${reviewContent}`
+            body: commentBody
           });
           console.log(`\n✅ Review posted as comment on PR #${pullNumber}`);
         } catch (commentError) {

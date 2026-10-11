@@ -164512,11 +164512,7 @@ ${diff}
   return messages;
 }
 
-// EXTERNAL MODULE: external "zlib"
-var external_zlib_ = __nccwpck_require__(43106);
 ;// CONCATENATED MODULE: ./src/sarif.js
-
-
 const SEVERITY_LEVEL = {
   CRITICAL: 'error',
   HIGH: 'error',
@@ -164680,7 +164676,7 @@ function buildSarif({
         tool: {
           driver: {
             name: 'yang-code-review',
-            version: '1.0.0',
+            version: '1.0.18',
             informationUri: 'https://github.com/YangYang-Research/yang-code-review',
             rules
           }
@@ -164712,12 +164708,6 @@ function securitySeverityScore(severity) {
     default:
       return '0.0';
   }
-}
-
-/** Gzip + base64 for GitHub code-scanning SARIF upload API. */
-function encodeSarifForUpload(sarifObject) {
-  const json = JSON.stringify(sarifObject);
-  return external_zlib_.gzipSync(Buffer.from(json, 'utf8')).toString('base64');
 }
 
 function reportDateStamp(date = new Date()) {
@@ -164753,29 +164743,6 @@ async function uploadReportArtifact({artifact, name, files, cwd}) {
   return {id, size};
 }
 
-async function uploadCodeScanningSarif({
-  octokit,
-  owner,
-  repo,
-  commitSha,
-  ref,
-  sarif
-}) {
-  const encoded = encodeSarifForUpload(sarif);
-  const response = await octokit.request(
-    'POST /repos/{owner}/{repo}/code-scanning/sarifs',
-    {
-      owner,
-      repo,
-      commit_sha: commitSha,
-      ref,
-      sarif: encoded,
-      tool_name: 'yang-code-review'
-    }
-  );
-  return response.data;
-}
-
 async function run() {
   try {
     const provider = core.getInput('PROVIDER', {required: true});
@@ -164803,13 +164770,11 @@ async function run() {
     let isPushEvent = false;
     let commitSha = null;
     let pullNumber = null;
-    let gitRef = context.ref;
 
     if (context.payload.pull_request) {
       const pr = context.payload.pull_request;
       pullNumber = pr.number;
       commitSha = pr.head.sha;
-      gitRef = `refs/pull/${pullNumber}/head`;
 
       const diffResponse = await octokit.request(
         'GET /repos/{owner}/{repo}/pulls/{pull_number}',
@@ -164827,7 +164792,6 @@ async function run() {
     } else if (context.eventName === 'push') {
       isPushEvent = true;
       commitSha = context.sha;
-      gitRef = context.ref;
       const beforeSha = context.payload.before;
       const afterSha = context.payload.after;
 
@@ -164979,24 +164943,6 @@ async function run() {
         });
       } catch (artifactError) {
         core.warning(`Failed to save artifact: ${artifactError.message}`);
-      }
-
-      try {
-        const upload = await uploadCodeScanningSarif({
-          octokit,
-          owner,
-          repo,
-          commitSha,
-          ref: gitRef,
-          sarif
-        });
-        console.log(
-          `\n✅ SARIF uploaded to code scanning (id: ${upload.id || 'ok'})`
-        );
-      } catch (sarifError) {
-        core.warning(
-          `Failed to upload SARIF to Security/code scanning: ${sarifError.message}. Need permission security-events: write (and Advanced Security on private repos).`
-        );
       }
     } catch (error) {
       core.setFailed(error.message);

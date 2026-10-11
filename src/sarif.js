@@ -1,5 +1,3 @@
-import zlib from 'zlib';
-
 const SEVERITY_LEVEL = {
   CRITICAL: 'error',
   HIGH: 'error',
@@ -163,7 +161,7 @@ export function buildSarif({
         tool: {
           driver: {
             name: 'yang-code-review',
-            version: '1.0.0',
+            version: '1.0.18',
             informationUri: 'https://github.com/YangYang-Research/yang-code-review',
             rules
           }
@@ -195,12 +193,6 @@ function securitySeverityScore(severity) {
     default:
       return '0.0';
   }
-}
-
-/** Gzip + base64 for GitHub code-scanning SARIF upload API. */
-export function encodeSarifForUpload(sarifObject) {
-  const json = JSON.stringify(sarifObject);
-  return zlib.gzipSync(Buffer.from(json, 'utf8')).toString('base64');
 }
 
 export function reportDateStamp(date = new Date()) {

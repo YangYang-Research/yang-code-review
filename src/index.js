@@ -8,7 +8,6 @@ import {buildReviewMessages} from './prompt.js';
 import {
   buildArtifactName,
   buildSarif,
-  encodeSarifForUpload,
   parseFindings,
   reportDateStamp
 } from './sarif.js';
@@ -19,29 +18,6 @@ async function uploadReportArtifact({artifact, name, files, cwd}) {
   });
   console.log(`\n✅ Review saved as artifact: ${name} (id: ${id}, bytes: ${size})`);
   return {id, size};
-}
-
-async function uploadCodeScanningSarif({
-  octokit,
-  owner,
-  repo,
-  commitSha,
-  ref,
-  sarif
-}) {
-  const encoded = encodeSarifForUpload(sarif);
-  const response = await octokit.request(
-    'POST /repos/{owner}/{repo}/code-scanning/sarifs',
-    {
-      owner,
-      repo,
-      commit_sha: commitSha,
-      ref,
-      sarif: encoded,
-      tool_name: 'yang-code-review'
-    }
-  );
-  return response.data;
 }
 
 async function run() {
@@ -71,13 +47,11 @@ async function run() {
     let isPushEvent = false;
     let commitSha = null;
     let pullNumber = null;
-    let gitRef = context.ref;
 
     if (context.payload.pull_request) {
       const pr = context.payload.pull_request;
       pullNumber = pr.number;
       commitSha = pr.head.sha;
-      gitRef = `refs/pull/${pullNumber}/head`;
 
       const diffResponse = await octokit.request(
         'GET /repos/{owner}/{repo}/pulls/{pull_number}',
@@ -95,7 +69,6 @@ async function run() {
     } else if (context.eventName === 'push') {
       isPushEvent = true;
       commitSha = context.sha;
-      gitRef = context.ref;
       const beforeSha = context.payload.before;
       const afterSha = context.payload.after;
 
@@ -247,24 +220,6 @@ async function run() {
         });
       } catch (artifactError) {
         core.warning(`Failed to save artifact: ${artifactError.message}`);
-      }
-
-      try {
-        const upload = await uploadCodeScanningSarif({
-          octokit,
-          owner,
-          repo,
-          commitSha,
-          ref: gitRef,
-          sarif
-        });
-        console.log(
-          `\n✅ SARIF uploaded to code scanning (id: ${upload.id || 'ok'})`
-        );
-      } catch (sarifError) {
-        core.warning(
-          `Failed to upload SARIF to Security/code scanning: ${sarifError.message}. Need permission security-events: write (and Advanced Security on private repos).`
-        );
       }
     } catch (error) {
       core.setFailed(error.message);

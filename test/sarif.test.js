@@ -4,7 +4,6 @@ import test from 'node:test';
 import {
   buildArtifactName,
   buildSarif,
-  encodeSarifForUpload,
   parseFindings,
   reportDateStamp
 } from '../src/sarif.js';
@@ -70,12 +69,6 @@ test('buildSarif falls back when no structured findings', () => {
     commitSha: 'abc'
   });
   assert.equal(sarif.runs[0].results[0].ruleId, 'YCR-REPORT');
-});
-
-test('encodeSarifForUpload returns gzip base64', () => {
-  const encoded = encodeSarifForUpload({version: '2.1.0', runs: []});
-  assert.match(encoded, /^[A-Za-z0-9+/=]+$/);
-  assert.ok(encoded.length > 20);
 });
 
 test('artifact name uses date and optional PR id', () => {

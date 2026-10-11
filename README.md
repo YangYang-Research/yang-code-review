@@ -94,12 +94,14 @@ jobs:
 
 ### Artifacts & Security tab
 
-After each run the action uploads:
+After each run the action:
 
-- **Actions artifact** named `yang-code-review-report-<YYYY-MM-DD>-pr-<pr_id>` (PR) or `yang-code-review-report-<YYYY-MM-DD>` (push), containing `.md` + `.sarif`
-- **Code scanning SARIF** via GitHub API → appears under **Security and quality → Code scanning**
+1. Writes `.md` + `.sarif`, uploads Actions artifact  
+   `yang-code-review-report-<YYYY-MM-DD>-pr-<pr_id>` (PR) or  
+   `yang-code-review-report-<YYYY-MM-DD>` (push)
+2. Uploads SARIF via `github/codeql-action/upload-sarif` → **Security and quality → Code scanning**
 
-Private/internal repos need GitHub Code Security / Advanced Security enabled for the SARIF upload to stick.
+Needs `security-events: write`. Private/internal repos also need GitHub Code Security / Advanced Security.
 
 ### Provider examples
 

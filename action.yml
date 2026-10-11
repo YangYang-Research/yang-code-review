@@ -20,21 +20,41 @@ inputs:
     required: false
     default: "4096"
   GITHUB_TOKEN:
-    description: GitHub token for PR comments and code scanning SARIF upload
+    description: GitHub token for PR comments and artifact upload
     required: true
 
 outputs:
   sarif_path:
     description: Absolute path to the generated SARIF file
+    value: ${{ steps.review.outputs.sarif_path }}
   artifact_name:
     description: Uploaded Actions artifact name
+    value: ${{ steps.review.outputs.artifact_name }}
   findings_count:
     description: Number of structured findings parsed into SARIF
+    value: ${{ steps.review.outputs.findings_count }}
 
 branding:
   icon: "shield"
   color: "red"
 
 runs:
-  using: node24
-  main: dist/index.js
+  using: composite
+  steps:
+    - id: review
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/dist/index.js"
+      env:
+        INPUT_PROVIDER: ${{ inputs.PROVIDER }}
+        INPUT_API_KEY: ${{ inputs.API_KEY }}
+        INPUT_MODEL_NAME: ${{ inputs.MODEL_NAME }}
+        INPUT_MODEL_TEMPERATURE: ${{ inputs.MODEL_TEMPERATURE }}
+        INPUT_MAX_TOKENS: ${{ inputs.MAX_TOKENS }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+
+    - name: Upload SARIF to code scanning
+      if: steps.review.outputs.sarif_path != ''
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.review.outputs.sarif_path }}
+        category: yang-code-review

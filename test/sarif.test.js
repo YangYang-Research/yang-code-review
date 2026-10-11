@@ -6,6 +6,7 @@ import {
   buildSarif,
   formatDependabotStyleComment,
   parseFindings,
+  parseJsonFindings,
   reportDateStamp,
   resolveFindingPath
 } from '../src/sarif.js';
@@ -48,6 +49,35 @@ Here are the findings for the identified flow:
 * **Impact:** Attacker may compromise the project.
 * **Recommendation:** Pin and audit the tool version.
 `;
+
+test('parseJsonFindings reads ycr-findings fence', () => {
+  const report = `
+Narrative...
+
+\`\`\`ycr-findings
+[
+  {
+    "severity": "HIGH",
+    "title": "SQL Injection",
+    "file": "src/db.js",
+    "line": 42,
+    "owasp": "A03:2021",
+    "description": "User input in SQL",
+    "impact": "Data leak",
+    "recommendation": "Use binds",
+    "source": "req.body.q",
+    "sink": "db.query"
+  }
+]
+\`\`\`
+`;
+  const findings = parseJsonFindings(report);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].severity, 'HIGH');
+  assert.equal(findings[0].file, 'src/db.js');
+  assert.equal(findings[0].line, 42);
+  assert.equal(parseFindings(report)[0].title, 'SQL Injection');
+});
 
 test('parseFindings extracts severity location and text', () => {
   const findings = parseFindings(SAMPLE);

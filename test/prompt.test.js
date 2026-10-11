@@ -21,6 +21,7 @@ test('system prompt requires change-driven E2E flow review and Change/Sink repor
   assert.match(SYSTEM_PROMPT, /Change\/Source/);
   assert.match(SYSTEM_PROMPT, /Sink:/);
   assert.match(SYSTEM_PROMPT, /E2E Flows Reviewed/);
+  assert.match(SYSTEM_PROMPT, /ycr-findings/);
 });
 
 test('buildReviewMessages wraps untrusted diff and asks for domain + E2E review', () => {
@@ -38,6 +39,7 @@ test('buildReviewMessages wraps untrusted diff and asks for domain + E2E review'
   assert.match(messages[1].content, /end-to-end flows/);
   assert.match(messages[1].content, /Change\/Source and Sink/);
   assert.match(messages[1].content, /Do not emit an OWASP Secure Code Review Checklist/);
+  assert.match(messages[1].content, /ycr-findings/);
   assert.match(messages[1].content, /<untrusted_diff>/);
   assert.match(messages[1].content, /acme\/app/);
   assert.match(

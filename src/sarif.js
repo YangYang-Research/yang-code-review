@@ -26,6 +26,9 @@ const SEVERITY_LABEL = {
 export function parseFindings(report) {
   if (!report || typeof report !== 'string') return [];
 
+  const fromJson = parseJsonFindings(report);
+  if (fromJson != null) return fromJson;
+
   const bracket = parseBracketFindings(report);
   if (bracket.length > 0) return bracket;
 
@@ -35,7 +38,125 @@ export function parseFindings(report) {
   const bullets = parseBulletFindings(report);
   if (bullets.length > 0) return bullets;
 
-  return [];
+  return parseSeverityListFindings(report);
+}
+
+/** Preferred: ```ycr-findings ... ``` JSON array. Returns null if fence absent. */
+export function parseJsonFindings(report) {
+  const fence = report.match(
+    /```(?:ycr-findings|json)\s*\n([\s\S]*?)\n```/i
+  );
+  if (!fence) return null;
+  try {
+    const data = JSON.parse(fence[1]);
+    if (!Array.isArray(data)) return [];
+    return data
+      .map((row) => normalizeJsonFinding(row))
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function normalizeJsonFinding(row) {
+  if (!row || typeof row !== 'object') return null;
+  const severity = String(row.severity || '')
+    .toUpperCase()
+    .trim();
+  if (!SEVERITY_LEVEL[severity]) return null;
+  const title = String(row.title || row.name || '').trim();
+  if (!title) return null;
+  const fileRaw = row.file || row.path || row.location || '';
+  const {file, line: lineFromLoc} = parseLocation(String(fileRaw || ''));
+  const lineNum = Number(row.line);
+  return {
+    severity,
+    title,
+    description: String(row.description || title).trim(),
+    impact: String(row.impact || '').trim(),
+    recommendation: String(
+      row.recommendation || row.remediation || ''
+    ).trim(),
+    owasp: String(row.owasp || '').trim(),
+    e2eFlow: String(row.e2eFlow || row.flow || '').trim(),
+    source: String(row.source || row.changeSource || '').trim(),
+    sink: String(row.sink || '').trim(),
+    file: file || undefined,
+    line: Number.isInteger(lineNum) && lineNum > 0 ? lineNum : lineFromLoc,
+    rawLocation: String(fileRaw || '')
+  };
+}
+
+/**
+ * Fallback: Severity section listing
+ *   * CRITICAL: Title
+ *   * HIGH: Title
+ * paired with numbered "1. **Title**: desc"
+ */
+function parseSeverityListFindings(report) {
+  const sevSection = report.match(
+    /\*\*Severity:\*\*\s*\n([\s\S]*?)(?=\n\*\*[A-Za-z]|\n### Report Generated|$)/i
+  );
+  if (!sevSection) return [];
+
+  const sevByTitle = new Map();
+  for (const line of sevSection[1].split('\n')) {
+    const m = line.match(
+      /^\s*[-*]\s*(CRITICAL|HIGH|MEDIUM|LOW|INFO)\s*:\s*(.+)$/i
+    );
+    if (m) sevByTitle.set(m[2].trim().toLowerCase(), m[1].toUpperCase());
+  }
+  if (sevByTitle.size === 0) return [];
+
+  const findings = [];
+  const itemRe =
+    /^\s*\d+\.\s*\*\*([^*]+)\*\*\s*:\s*([\s\S]*?)(?=^\s*\d+\.\s*\*\*|\n\*\*[A-Za-z]|\n### Report Generated|$)/gim;
+  let match;
+  while ((match = itemRe.exec(report)) !== null) {
+    const title = match[1].trim();
+    const description = match[2].trim().replace(/\s+/g, ' ');
+    const severity =
+      sevByTitle.get(title.toLowerCase()) ||
+      [...sevByTitle.entries()].find(([k]) =>
+        title.toLowerCase().includes(k) || k.includes(title.toLowerCase())
+      )?.[1] ||
+      'MEDIUM';
+    const fileMatch = description.match(
+      /`([^`]+\.[A-Za-z0-9]+)`|([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)/
+    );
+    const file = fileMatch
+      ? (fileMatch[1] || fileMatch[2]).replace(/^[ab]\//, '')
+      : undefined;
+    findings.push({
+      severity,
+      title,
+      description,
+      impact: '',
+      recommendation: '',
+      owasp: '',
+      e2eFlow: '',
+      source: '',
+      sink: '',
+      file,
+      line: undefined,
+      rawLocation: file || ''
+    });
+  }
+
+  // Attach recommendations by index when present.
+  const recSection = report.match(
+    /\*\*Recommendations?:\*\*\s*\n([\s\S]*?)(?=\n\*\*[A-Za-z]|\n### Report Generated|$)/i
+  );
+  if (recSection) {
+    const recs = [...recSection[1].matchAll(/^\s*\d+\.\s+(.+)$/gm)].map(
+      (m) => m[1].trim()
+    );
+    findings.forEach((f, i) => {
+      if (recs[i]) f.recommendation = recs[i];
+    });
+  }
+
+  return findings;
 }
 
 function parseBracketFindings(report) {
@@ -424,7 +545,7 @@ export function buildSarif({
         tool: {
           driver: {
             name: 'yang-code-review',
-            version: '1.0.23',
+            version: '1.0.24',
             informationUri:
               'https://github.com/YangYang-Research/yang-code-review',
             rules

@@ -1,6 +1,5 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import {DefaultArtifactClient} from '@actions/artifact';
 import fs from 'fs';
 import path from 'path';
 import {requestReview, resolveProviderConfig} from './providers.js';
@@ -11,14 +10,6 @@ import {
   parseFindings,
   reportDateStamp
 } from './sarif.js';
-
-async function uploadReportArtifact({artifact, name, files, cwd}) {
-  const {id, size} = await artifact.uploadArtifact(name, files, cwd, {
-    retentionDays: 90
-  });
-  console.log(`\n✅ Review saved as artifact: ${name} (id: ${id}, bytes: ${size})`);
-  return {id, size};
-}
 
 async function run() {
   try {
@@ -41,7 +32,6 @@ async function run() {
     const owner = context.repo.owner;
     const repo = context.repo.repo;
     const octokit = github.getOctokit(githubToken);
-    const artifact = new DefaultArtifactClient();
 
     let diff;
     let isPushEvent = false;
@@ -182,17 +172,20 @@ async function run() {
         : `# 🤖 Yang Code Review (YCR)\n\n**Pull Request:** #${pullNumber}\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n`;
 
       const findings = parseFindings(reviewContent);
+      // Anchor missing locations to README (always in tree) so code scanning accepts SARIF.
       const sarif = buildSarif({
         findings,
         reportText: reviewContent,
         owner,
         repo,
-        commitSha
+        commitSha,
+        fallbackUri: 'README.md'
       });
 
       fs.writeFileSync(mdPath, `${header}${reviewContent}`, 'utf8');
       fs.writeFileSync(sarifPath, `${JSON.stringify(sarif, null, 2)}\n`, 'utf8');
       core.setOutput('sarif_path', sarifPath);
+      core.setOutput('md_path', mdPath);
       core.setOutput('artifact_name', artifactName);
       core.setOutput('findings_count', String(findings.length));
 
@@ -208,18 +201,6 @@ async function run() {
         } catch (commentError) {
           core.warning(`Failed to post comment on PR: ${commentError.message}`);
         }
-      }
-
-      try {
-        core.info(`Uploading artifact ${artifactName}`);
-        await uploadReportArtifact({
-          artifact,
-          name: artifactName,
-          files: [mdFileName, sarifFileName],
-          cwd: process.cwd()
-        });
-      } catch (artifactError) {
-        core.warning(`Failed to save artifact: ${artifactError.message}`);
       }
     } catch (error) {
       core.setFailed(error.message);

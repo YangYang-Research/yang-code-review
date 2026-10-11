@@ -20,13 +20,16 @@ inputs:
     required: false
     default: "4096"
   GITHUB_TOKEN:
-    description: GitHub token for PR comments and artifact upload
+    description: GitHub token for PR comments
     required: true
 
 outputs:
   sarif_path:
     description: Absolute path to the generated SARIF file
     value: ${{ steps.review.outputs.sarif_path }}
+  md_path:
+    description: Absolute path to the generated markdown report
+    value: ${{ steps.review.outputs.md_path }}
   artifact_name:
     description: Uploaded Actions artifact name
     value: ${{ steps.review.outputs.artifact_name }}
@@ -41,6 +44,11 @@ branding:
 runs:
   using: composite
   steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
     - id: review
       shell: bash
       run: node "$GITHUB_ACTION_PATH/dist/index.js"
@@ -52,9 +60,20 @@ runs:
         INPUT_MAX_TOKENS: ${{ inputs.MAX_TOKENS }}
         INPUT_GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
 
+    - name: Upload report artifact
+      if: steps.review.outputs.artifact_name != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.review.outputs.artifact_name }}
+        path: |
+          ${{ steps.review.outputs.md_path }}
+          ${{ steps.review.outputs.sarif_path }}
+        retention-days: 90
+        if-no-files-found: warn
+
     - name: Upload SARIF to code scanning
       if: steps.review.outputs.sarif_path != ''
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: ${{ steps.review.outputs.sarif_path }}
         category: yang-code-review

@@ -89,6 +89,7 @@ jobs:
 | Name | Description |
 |------|-------------|
 | `sarif_path` | Path to generated SARIF file |
+| `md_path` | Path to generated markdown report |
 | `artifact_name` | Actions artifact name |
 | `findings_count` | Structured findings parsed into SARIF |
 
@@ -99,7 +100,7 @@ After each run the action:
 1. Writes `.md` + `.sarif`, uploads Actions artifact  
    `yang-code-review-report-<YYYY-MM-DD>-pr-<pr_id>` (PR) or  
    `yang-code-review-report-<YYYY-MM-DD>` (push)
-2. Uploads SARIF via `github/codeql-action/upload-sarif` → **Security and quality → Code scanning**
+2. Uploads SARIF via `github/codeql-action/upload-sarif@v4` → **Security and quality → Code scanning**
 
 Needs `security-events: write`. Private/internal repos also need GitHub Code Security / Advanced Security.
 

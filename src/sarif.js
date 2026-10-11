@@ -56,7 +56,6 @@ function parseLocation(raw) {
   if (!raw || /^n\/?a$/i.test(raw)) {
     return {file: undefined, line: undefined};
   }
-  // path:line or path:line:col — strip leading a/ b/ from diffs
   const m = raw.match(/^(.+?):(\d+)(?::\d+)?\s*$/);
   if (!m) {
     return {file: raw.replace(/^[ab]\//, ''), line: undefined};
@@ -67,20 +66,36 @@ function parseLocation(raw) {
   };
 }
 
+/** GitHub code scanning rejects results with zero locations. */
+export function buildLocation(file, line, fallbackUri) {
+  const uri = (file || fallbackUri || 'yang-code-review-report.md').replace(
+    /^\.\//,
+    ''
+  );
+  const physicalLocation = {
+    artifactLocation: {uri, uriBaseId: '%SRCROOT%'}
+  };
+  if (Number.isInteger(line) && line > 0) {
+    physicalLocation.region = {startLine: line};
+  } else if (!file) {
+    physicalLocation.region = {startLine: 1};
+  }
+  return [{physicalLocation}];
+}
+
 export function buildSarif({
   findings,
   reportText,
   owner,
   repo,
-  commitSha
+  commitSha,
+  fallbackUri = 'yang-code-review-report.md'
 }) {
   const rules = [];
-  const ruleIds = new Map();
   const results = [];
 
   findings.forEach((f, index) => {
     const ruleId = `YCR-${String(index + 1).padStart(3, '0')}`;
-    ruleIds.set(ruleId, f);
     rules.push({
       id: ruleId,
       name: f.title.slice(0, 128),
@@ -101,7 +116,7 @@ export function buildSarif({
       }
     });
 
-    const result = {
+    results.push({
       ruleId,
       level: SEVERITY_LEVEL[f.severity] || 'note',
       message: {
@@ -113,29 +128,14 @@ export function buildSarif({
           .filter(Boolean)
           .join('\n\n')
       },
+      locations: buildLocation(f.file, f.line, fallbackUri),
       properties: {
         'security-severity': securitySeverityScore(f.severity)
       }
-    };
-
-    if (f.file) {
-      const region = Number.isInteger(f.line) && f.line > 0
-        ? {startLine: f.line}
-        : undefined;
-      result.locations = [
-        {
-          physicalLocation: {
-            artifactLocation: {uri: f.file, uriBaseId: '%SRCROOT%'},
-            ...(region ? {region} : {})
-          }
-        }
-      ];
-    }
-
-    results.push(result);
+    });
   });
 
-  // If model returned prose without structured findings, still upload a note.
+  // Unstructured model output: one note anchored to the report file.
   if (results.length === 0 && reportText?.trim()) {
     rules.push({
       id: 'YCR-REPORT',
@@ -148,21 +148,22 @@ export function buildSarif({
       level: 'note',
       message: {
         text: reportText.slice(0, 64_000)
-      }
+      },
+      locations: buildLocation(undefined, 1, fallbackUri)
     });
   }
 
   return {
-    $schema:
-      'https://json.schemastore.org/sarif-2.1.0.json',
+    $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
     version: '2.1.0',
     runs: [
       {
         tool: {
           driver: {
             name: 'yang-code-review',
-            version: '1.0.18',
-            informationUri: 'https://github.com/YangYang-Research/yang-code-review',
+            version: '1.0.19',
+            informationUri:
+              'https://github.com/YangYang-Research/yang-code-review',
             rules
           }
         },

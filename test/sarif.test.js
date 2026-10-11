@@ -66,9 +66,37 @@ test('buildSarif falls back when no structured findings', () => {
     reportText: 'plain prose only',
     owner: 'acme',
     repo: 'app',
-    commitSha: 'abc'
+    commitSha: 'abc',
+    fallbackUri: 'README.md'
   });
-  assert.equal(sarif.runs[0].results[0].ruleId, 'YCR-REPORT');
+  const result = sarif.runs[0].results[0];
+  assert.equal(result.ruleId, 'YCR-REPORT');
+  assert.equal(
+    result.locations[0].physicalLocation.artifactLocation.uri,
+    'README.md'
+  );
+});
+
+test('buildSarif always includes a location', () => {
+  const sarif = buildSarif({
+    findings: [
+      {
+        severity: 'LOW',
+        title: 'No path',
+        description: 'missing location',
+        recommendation: '',
+        owasp: '',
+        file: undefined,
+        line: undefined
+      }
+    ],
+    reportText: '',
+    owner: 'acme',
+    repo: 'app',
+    commitSha: 'abc',
+    fallbackUri: 'README.md'
+  });
+  assert.ok(sarif.runs[0].results[0].locations?.length >= 1);
 });
 
 test('artifact name uses date and optional PR id', () => {

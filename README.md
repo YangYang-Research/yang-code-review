@@ -71,6 +71,8 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
+      security-events: write   # SARIF → Security / Code scanning
+      actions: write          # upload Actions artifacts
     steps:
       - name: yang-code-review
         uses: YangYang-Research/yang-code-review@<version>
@@ -81,6 +83,23 @@ jobs:
           MODEL_TEMPERATURE: 0.2
           GITHUB_TOKEN: ${{ github.token }}
 ```
+
+### Outputs
+
+| Name | Description |
+|------|-------------|
+| `sarif_path` | Path to generated SARIF file |
+| `artifact_name` | Actions artifact name |
+| `findings_count` | Structured findings parsed into SARIF |
+
+### Artifacts & Security tab
+
+After each run the action uploads:
+
+- **Actions artifact** named `yang-code-review-report-<YYYY-MM-DD>-pr-<pr_id>` (PR) or `yang-code-review-report-<YYYY-MM-DD>` (push), containing `.md` + `.sarif`
+- **Code scanning SARIF** via GitHub API → appears under **Security and quality → Code scanning**
+
+Private/internal repos need GitHub Code Security / Advanced Security enabled for the SARIF upload to stick.
 
 ### Provider examples
 

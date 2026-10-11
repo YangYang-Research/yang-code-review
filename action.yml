@@ -20,8 +20,16 @@ inputs:
     required: false
     default: "4096"
   GITHUB_TOKEN:
-    description: GitHub token for PR comments
+    description: GitHub token for PR comments and code scanning SARIF upload
     required: true
+
+outputs:
+  sarif_path:
+    description: Absolute path to the generated SARIF file
+  artifact_name:
+    description: Uploaded Actions artifact name
+  findings_count:
+    description: Number of structured findings parsed into SARIF
 
 branding:
   icon: "shield"

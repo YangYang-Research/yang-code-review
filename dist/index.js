@@ -164512,6 +164512,229 @@ ${diff}
   return messages;
 }
 
+// EXTERNAL MODULE: external "zlib"
+var external_zlib_ = __nccwpck_require__(43106);
+;// CONCATENATED MODULE: ./src/sarif.js
+
+
+const SEVERITY_LEVEL = {
+  CRITICAL: 'error',
+  HIGH: 'error',
+  MEDIUM: 'warning',
+  LOW: 'note',
+  INFO: 'note'
+};
+
+/**
+ * Parse YCR markdown findings into structured rows.
+ * Expects blocks like:
+ *   [HIGH] XSS
+ *   OWASP: ...
+ *   Location: path/file.js:42
+ */
+function parseFindings(report) {
+  if (!report || typeof report !== 'string') return [];
+
+  const findings = [];
+  const blockRe =
+    /\[(CRITICAL|HIGH|MEDIUM|LOW|INFO)\]\s*([^\n]+)\n([\s\S]*?)(?=\n\[(?:CRITICAL|HIGH|MEDIUM|LOW|INFO)\]|\n### Report Generated|$)/gi;
+
+  let match;
+  while ((match = blockRe.exec(report)) !== null) {
+    const severity = match[1].toUpperCase();
+    const title = match[2].trim();
+    const body = match[3] || '';
+
+    const field = (name) => {
+      const m = body.match(new RegExp(`^${name}:\\s*(.+)$`, 'im'));
+      return m ? m[1].trim() : '';
+    };
+
+    const locationRaw = field('Location');
+    const {file, line} = parseLocation(locationRaw);
+    const description = field('Description') || title;
+    const recommendation = field('Recommendation');
+    const owasp = field('OWASP');
+
+    findings.push({
+      severity,
+      title,
+      description,
+      recommendation,
+      owasp,
+      file,
+      line,
+      rawLocation: locationRaw
+    });
+  }
+
+  return findings;
+}
+
+function parseLocation(raw) {
+  if (!raw || /^n\/?a$/i.test(raw)) {
+    return {file: undefined, line: undefined};
+  }
+  // path:line or path:line:col — strip leading a/ b/ from diffs
+  const m = raw.match(/^(.+?):(\d+)(?::\d+)?\s*$/);
+  if (!m) {
+    return {file: raw.replace(/^[ab]\//, ''), line: undefined};
+  }
+  return {
+    file: m[1].replace(/^[ab]\//, '').replace(/^\.\//, ''),
+    line: Number(m[2])
+  };
+}
+
+function buildSarif({
+  findings,
+  reportText,
+  owner,
+  repo,
+  commitSha
+}) {
+  const rules = [];
+  const ruleIds = new Map();
+  const results = [];
+
+  findings.forEach((f, index) => {
+    const ruleId = `YCR-${String(index + 1).padStart(3, '0')}`;
+    ruleIds.set(ruleId, f);
+    rules.push({
+      id: ruleId,
+      name: f.title.slice(0, 128),
+      shortDescription: {text: f.title},
+      fullDescription: {text: f.description.slice(0, 1024)},
+      help: {
+        text: [f.recommendation, f.owasp ? `OWASP: ${f.owasp}` : '']
+          .filter(Boolean)
+          .join('\n')
+      },
+      defaultConfiguration: {
+        level: SEVERITY_LEVEL[f.severity] || 'note'
+      },
+      properties: {
+        tags: ['security', 'owasp', 'yang-code-review'],
+        'security-severity': securitySeverityScore(f.severity),
+        precision: 'medium'
+      }
+    });
+
+    const result = {
+      ruleId,
+      level: SEVERITY_LEVEL[f.severity] || 'note',
+      message: {
+        text: [
+          f.description,
+          f.recommendation ? `Remediation: ${f.recommendation}` : '',
+          f.owasp ? `OWASP: ${f.owasp}` : ''
+        ]
+          .filter(Boolean)
+          .join('\n\n')
+      },
+      properties: {
+        'security-severity': securitySeverityScore(f.severity)
+      }
+    };
+
+    if (f.file) {
+      const region = Number.isInteger(f.line) && f.line > 0
+        ? {startLine: f.line}
+        : undefined;
+      result.locations = [
+        {
+          physicalLocation: {
+            artifactLocation: {uri: f.file, uriBaseId: '%SRCROOT%'},
+            ...(region ? {region} : {})
+          }
+        }
+      ];
+    }
+
+    results.push(result);
+  });
+
+  // If model returned prose without structured findings, still upload a note.
+  if (results.length === 0 && reportText?.trim()) {
+    rules.push({
+      id: 'YCR-REPORT',
+      name: 'Yang Code Review report',
+      shortDescription: {text: 'Unstructured YCR report'},
+      defaultConfiguration: {level: 'note'}
+    });
+    results.push({
+      ruleId: 'YCR-REPORT',
+      level: 'note',
+      message: {
+        text: reportText.slice(0, 64_000)
+      }
+    });
+  }
+
+  return {
+    $schema:
+      'https://json.schemastore.org/sarif-2.1.0.json',
+    version: '2.1.0',
+    runs: [
+      {
+        tool: {
+          driver: {
+            name: 'yang-code-review',
+            version: '1.0.0',
+            informationUri: 'https://github.com/YangYang-Research/yang-code-review',
+            rules
+          }
+        },
+        versionControlProvenance: commitSha
+          ? [
+              {
+                repositoryUri: `https://github.com/${owner}/${repo}`,
+                revisionId: commitSha
+              }
+            ]
+          : undefined,
+        results
+      }
+    ]
+  };
+}
+
+function securitySeverityScore(severity) {
+  switch (severity) {
+    case 'CRITICAL':
+      return '9.5';
+    case 'HIGH':
+      return '8.0';
+    case 'MEDIUM':
+      return '5.5';
+    case 'LOW':
+      return '3.0';
+    default:
+      return '0.0';
+  }
+}
+
+/** Gzip + base64 for GitHub code-scanning SARIF upload API. */
+function encodeSarifForUpload(sarifObject) {
+  const json = JSON.stringify(sarifObject);
+  return external_zlib_.gzipSync(Buffer.from(json, 'utf8')).toString('base64');
+}
+
+function reportDateStamp(date = new Date()) {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function buildArtifactName({date, pullNumber}) {
+  const stamp = typeof date === 'string' ? date : reportDateStamp(date);
+  if (pullNumber != null && pullNumber !== '') {
+    return `yang-code-review-report-${stamp}-pr-${pullNumber}`;
+  }
+  return `yang-code-review-report-${stamp}`;
+}
+
 ;// CONCATENATED MODULE: ./src/index.js
 
 
@@ -164521,15 +164744,46 @@ ${diff}
 
 
 
+
+async function uploadReportArtifact({artifact, name, files, cwd}) {
+  const {id, size} = await artifact.uploadArtifact(name, files, cwd, {
+    retentionDays: 90
+  });
+  console.log(`\n✅ Review saved as artifact: ${name} (id: ${id}, bytes: ${size})`);
+  return {id, size};
+}
+
+async function uploadCodeScanningSarif({
+  octokit,
+  owner,
+  repo,
+  commitSha,
+  ref,
+  sarif
+}) {
+  const encoded = encodeSarifForUpload(sarif);
+  const response = await octokit.request(
+    'POST /repos/{owner}/{repo}/code-scanning/sarifs',
+    {
+      owner,
+      repo,
+      commit_sha: commitSha,
+      ref,
+      sarif: encoded,
+      tool_name: 'yang-code-review'
+    }
+  );
+  return response.data;
+}
+
 async function run() {
   try {
-    // Mask sensitive input
     const provider = core.getInput('PROVIDER', {required: true});
     const apiKey = core.getInput('API_KEY', {required: true});
-    const modelName = core.getInput('MODEL_NAME', { required: true });
+    const modelName = core.getInput('MODEL_NAME', {required: true});
     const modelTemperature = core.getInput('MODEL_TEMPERATURE');
     const maxTokens = core.getInput('MAX_TOKENS') || '4096';
-    const githubToken = core.getInput('GITHUB_TOKEN', { required: true });
+    const githubToken = core.getInput('GITHUB_TOKEN', {required: true});
 
     core.setSecret(apiKey);
     core.setSecret(githubToken);
@@ -164548,20 +164802,21 @@ async function run() {
     let diff;
     let isPushEvent = false;
     let commitSha = null;
+    let pullNumber = null;
+    let gitRef = context.ref;
 
-    // Handle both pull_request and push events
     if (context.payload.pull_request) {
-      // Pull request event
       const pr = context.payload.pull_request;
-      const pull_number = pr.number;
+      pullNumber = pr.number;
+      commitSha = pr.head.sha;
+      gitRef = `refs/pull/${pullNumber}/head`;
 
-      // Fetch PR diff
       const diffResponse = await octokit.request(
         'GET /repos/{owner}/{repo}/pulls/{pull_number}',
         {
           owner,
           repo,
-          pull_number,
+          pull_number: pullNumber,
           headers: {
             accept: 'application/vnd.github.v3.diff'
           }
@@ -164570,13 +164825,12 @@ async function run() {
 
       diff = diffResponse.data;
     } else if (context.eventName === 'push') {
-      // Push event
       isPushEvent = true;
       commitSha = context.sha;
+      gitRef = context.ref;
       const beforeSha = context.payload.before;
       const afterSha = context.payload.after;
 
-      // Get the diff between before and after commits
       try {
         const compareResponse = await octokit.rest.repos.compareCommits({
           owner,
@@ -164585,7 +164839,6 @@ async function run() {
           head: afterSha
         });
 
-        // Build diff from the comparison
         diff = '';
         for (const file of compareResponse.data.files || []) {
           diff += `diff --git a/${file.filename} b/${file.filename}\n`;
@@ -164598,15 +164851,13 @@ async function run() {
         }
       } catch (error) {
         core.warning(`Failed to get diff from compareCommits: ${error.message}`);
-        // Fallback: try to get diff from the commit directly
         try {
           const commitResponse = await octokit.rest.repos.getCommit({
             owner,
             repo,
             ref: commitSha
           });
-          
-          // Build diff from commit files
+
           diff = '';
           for (const file of commitResponse.data.files || []) {
             diff += `diff --git a/${file.filename} b/${file.filename}\n`;
@@ -164619,11 +164870,12 @@ async function run() {
         }
       }
     } else {
-      core.setFailed(`This action can only run on pull_request or push events. Current event: ${context.eventName}`);
+      core.setFailed(
+        `This action can only run on pull_request or push events. Current event: ${context.eventName}`
+      );
       return;
     }
 
-    // Check if diff is empty
     if (!diff || diff.trim().length === 0) {
       core.info('No changes detected in the diff. Skipping code review.');
       return;
@@ -164637,11 +164889,15 @@ async function run() {
         parsedTemperature < 0 ||
         parsedTemperature > 1)
     ) {
-      throw new Error(`MODEL_TEMPERATURE must be a number between 0 and 1. Received: ${modelTemperature}`);
+      throw new Error(
+        `MODEL_TEMPERATURE must be a number between 0 and 1. Received: ${modelTemperature}`
+      );
     }
     const parsedMaxTokens = Number(maxTokens);
     if (!Number.isInteger(parsedMaxTokens) || parsedMaxTokens < 1) {
-      throw new Error(`MAX_TOKENS must be a positive integer. Received: ${maxTokens}`);
+      throw new Error(
+        `MAX_TOKENS must be a positive integer. Received: ${maxTokens}`
+      );
     }
 
     try {
@@ -164657,7 +164913,6 @@ async function run() {
           repo,
           eventName: context.eventName,
           diff,
-          // YangYang /v1/agents loads system prompt from agents.yang-code-review.
           includeSystem: !useYangyangAgent
         }),
         onRetry: (attempt, attempts, error) => {
@@ -164667,105 +164922,85 @@ async function run() {
         }
       });
 
-      // Log the full accumulated content
       console.log('\n\n=== Yang Code Review (YCR) Result ===');
       console.log(reviewContent);
 
-      // Handle output based on event type
-      if (isPushEvent) {
-        // Save review as artifact for push events
-        try {
-          const artifactFileName = `yang-code-review-${commitSha.substring(0, 7)}-report.md`;
-          const artifactPath = external_path_.resolve(process.cwd(), artifactFileName);
-          
-          // Create the review content with metadata
-          const artifactContent = `# 🤖 Yang Code Review (YCR)\n\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n${reviewContent}`;
-          
-          // Write to file
-          external_fs_.writeFileSync(artifactPath, artifactContent, 'utf8');
-          
-          // Verify file exists before uploading
-          if (!external_fs_.existsSync(artifactPath)) {
-            throw new Error(`Artifact file was not created: ${artifactPath}`);
-          }
-          
-          core.info(`Uploading artifact from ${process.cwd()}`);
-          core.info(`Files: ${[artifactFileName]}`);
-          
-          // Upload artifact - use relative filename from current working directory
-          const {id, size} = await artifact.uploadArtifact(
-            'yang-code-review',
-            [artifactFileName],
-            process.cwd(), // root directory
-            {
-              retentionDays: 90
-            }
-          );
-          
-          console.log(`\n✅ Review saved as artifact: yang-code-review (id: ${id}, bytes: ${size})`);
-        } catch (artifactError) {
-          core.warning(`Failed to save artifact: ${artifactError.message}`);
-          // Don't fail the action if artifact upload fails
-        }
-      } else {
-        // Post review as a comment on the PR for pull_request events
-        const pr = context.payload.pull_request;
-        const pull_number = pr.number;
-        const prSha = pr.head.sha;
-        
-        // Post comment on PR
+      const dateStamp = reportDateStamp();
+      const artifactName = buildArtifactName({
+        date: dateStamp,
+        pullNumber
+      });
+      const shortSha = commitSha.substring(0, 7);
+      const mdFileName = `${artifactName}-${shortSha}.md`;
+      const sarifFileName = `${artifactName}.sarif`;
+      const mdPath = external_path_.resolve(process.cwd(), mdFileName);
+      const sarifPath = external_path_.resolve(process.cwd(), sarifFileName);
+
+      const header = isPushEvent
+        ? `# 🤖 Yang Code Review (YCR)\n\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n`
+        : `# 🤖 Yang Code Review (YCR)\n\n**Pull Request:** #${pullNumber}\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n`;
+
+      const findings = parseFindings(reviewContent);
+      const sarif = buildSarif({
+        findings,
+        reportText: reviewContent,
+        owner,
+        repo,
+        commitSha
+      });
+
+      external_fs_.writeFileSync(mdPath, `${header}${reviewContent}`, 'utf8');
+      external_fs_.writeFileSync(sarifPath, `${JSON.stringify(sarif, null, 2)}\n`, 'utf8');
+      core.setOutput('sarif_path', sarifPath);
+      core.setOutput('artifact_name', artifactName);
+      core.setOutput('findings_count', String(findings.length));
+
+      if (!isPushEvent) {
         try {
           await octokit.rest.issues.createComment({
             owner,
             repo,
-            issue_number: pull_number,
+            issue_number: pullNumber,
             body: `## 🤖 Yang Code Review (YCR)\n\n${reviewContent}`
           });
-          console.log(`\n✅ Review posted as comment on PR #${pull_number}`);
+          console.log(`\n✅ Review posted as comment on PR #${pullNumber}`);
         } catch (commentError) {
           core.warning(`Failed to post comment on PR: ${commentError.message}`);
-          // Don't fail the action if comment posting fails
-        }
-        
-        // Save review as artifact for pull request events
-        try {
-          const artifactFileName = `yang-code-review-pr-${pull_number}-${prSha.substring(0, 7)}-report.md`;
-          const artifactPath = external_path_.resolve(process.cwd(), artifactFileName);
-          
-          // Create the review content with metadata
-          const artifactContent = `# 🤖 Yang Code Review (YCR)\n\n**Pull Request:** #${pull_number}\n**Commit:** ${prSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n${reviewContent}`;
-          
-          // Write to file
-          external_fs_.writeFileSync(artifactPath, artifactContent, 'utf8');
-          
-          // Verify file exists before uploading
-          if (!external_fs_.existsSync(artifactPath)) {
-            throw new Error(`Artifact file was not created: ${artifactPath}`);
-          }
-          
-          core.info(`Uploading artifact from ${process.cwd()}`);
-          core.info(`Files: ${[artifactFileName]}`);
-
-          // Upload artifact - use relative filename from current working directory
-          const {id, size} = await artifact.uploadArtifact(
-            `yang-code-review-pr-${pull_number}`,
-            [artifactFileName],
-            process.cwd(), // root directory
-            {
-              retentionDays: 90
-            }
-          );
-          
-          console.log(`\n✅ Review saved as artifact: yang-code-review-pr-${pull_number} (id: ${id}, bytes: ${size})`);
-        } catch (artifactError) {
-          core.warning(`Failed to save artifact: ${artifactError.message}`);
-          // Don't fail the action if artifact upload fails
         }
       }
 
+      try {
+        core.info(`Uploading artifact ${artifactName}`);
+        await uploadReportArtifact({
+          artifact,
+          name: artifactName,
+          files: [mdFileName, sarifFileName],
+          cwd: process.cwd()
+        });
+      } catch (artifactError) {
+        core.warning(`Failed to save artifact: ${artifactError.message}`);
+      }
+
+      try {
+        const upload = await uploadCodeScanningSarif({
+          octokit,
+          owner,
+          repo,
+          commitSha,
+          ref: gitRef,
+          sarif
+        });
+        console.log(
+          `\n✅ SARIF uploaded to code scanning (id: ${upload.id || 'ok'})`
+        );
+      } catch (sarifError) {
+        core.warning(
+          `Failed to upload SARIF to Security/code scanning: ${sarifError.message}. Need permission security-events: write (and Advanced Security on private repos).`
+        );
+      }
     } catch (error) {
       core.setFailed(error.message);
-    } 
+    }
   } catch (error) {
     core.setFailed(error.message);
   }

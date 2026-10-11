@@ -5,16 +5,53 @@ import fs from 'fs';
 import path from 'path';
 import {requestReview, resolveProviderConfig} from './providers.js';
 import {buildReviewMessages} from './prompt.js';
+import {
+  buildArtifactName,
+  buildSarif,
+  encodeSarifForUpload,
+  parseFindings,
+  reportDateStamp
+} from './sarif.js';
+
+async function uploadReportArtifact({artifact, name, files, cwd}) {
+  const {id, size} = await artifact.uploadArtifact(name, files, cwd, {
+    retentionDays: 90
+  });
+  console.log(`\n✅ Review saved as artifact: ${name} (id: ${id}, bytes: ${size})`);
+  return {id, size};
+}
+
+async function uploadCodeScanningSarif({
+  octokit,
+  owner,
+  repo,
+  commitSha,
+  ref,
+  sarif
+}) {
+  const encoded = encodeSarifForUpload(sarif);
+  const response = await octokit.request(
+    'POST /repos/{owner}/{repo}/code-scanning/sarifs',
+    {
+      owner,
+      repo,
+      commit_sha: commitSha,
+      ref,
+      sarif: encoded,
+      tool_name: 'yang-code-review'
+    }
+  );
+  return response.data;
+}
 
 async function run() {
   try {
-    // Mask sensitive input
     const provider = core.getInput('PROVIDER', {required: true});
     const apiKey = core.getInput('API_KEY', {required: true});
-    const modelName = core.getInput('MODEL_NAME', { required: true });
+    const modelName = core.getInput('MODEL_NAME', {required: true});
     const modelTemperature = core.getInput('MODEL_TEMPERATURE');
     const maxTokens = core.getInput('MAX_TOKENS') || '4096';
-    const githubToken = core.getInput('GITHUB_TOKEN', { required: true });
+    const githubToken = core.getInput('GITHUB_TOKEN', {required: true});
 
     core.setSecret(apiKey);
     core.setSecret(githubToken);
@@ -33,20 +70,21 @@ async function run() {
     let diff;
     let isPushEvent = false;
     let commitSha = null;
+    let pullNumber = null;
+    let gitRef = context.ref;
 
-    // Handle both pull_request and push events
     if (context.payload.pull_request) {
-      // Pull request event
       const pr = context.payload.pull_request;
-      const pull_number = pr.number;
+      pullNumber = pr.number;
+      commitSha = pr.head.sha;
+      gitRef = `refs/pull/${pullNumber}/head`;
 
-      // Fetch PR diff
       const diffResponse = await octokit.request(
         'GET /repos/{owner}/{repo}/pulls/{pull_number}',
         {
           owner,
           repo,
-          pull_number,
+          pull_number: pullNumber,
           headers: {
             accept: 'application/vnd.github.v3.diff'
           }
@@ -55,13 +93,12 @@ async function run() {
 
       diff = diffResponse.data;
     } else if (context.eventName === 'push') {
-      // Push event
       isPushEvent = true;
       commitSha = context.sha;
+      gitRef = context.ref;
       const beforeSha = context.payload.before;
       const afterSha = context.payload.after;
 
-      // Get the diff between before and after commits
       try {
         const compareResponse = await octokit.rest.repos.compareCommits({
           owner,
@@ -70,7 +107,6 @@ async function run() {
           head: afterSha
         });
 
-        // Build diff from the comparison
         diff = '';
         for (const file of compareResponse.data.files || []) {
           diff += `diff --git a/${file.filename} b/${file.filename}\n`;
@@ -83,15 +119,13 @@ async function run() {
         }
       } catch (error) {
         core.warning(`Failed to get diff from compareCommits: ${error.message}`);
-        // Fallback: try to get diff from the commit directly
         try {
           const commitResponse = await octokit.rest.repos.getCommit({
             owner,
             repo,
             ref: commitSha
           });
-          
-          // Build diff from commit files
+
           diff = '';
           for (const file of commitResponse.data.files || []) {
             diff += `diff --git a/${file.filename} b/${file.filename}\n`;
@@ -104,11 +138,12 @@ async function run() {
         }
       }
     } else {
-      core.setFailed(`This action can only run on pull_request or push events. Current event: ${context.eventName}`);
+      core.setFailed(
+        `This action can only run on pull_request or push events. Current event: ${context.eventName}`
+      );
       return;
     }
 
-    // Check if diff is empty
     if (!diff || diff.trim().length === 0) {
       core.info('No changes detected in the diff. Skipping code review.');
       return;
@@ -122,11 +157,15 @@ async function run() {
         parsedTemperature < 0 ||
         parsedTemperature > 1)
     ) {
-      throw new Error(`MODEL_TEMPERATURE must be a number between 0 and 1. Received: ${modelTemperature}`);
+      throw new Error(
+        `MODEL_TEMPERATURE must be a number between 0 and 1. Received: ${modelTemperature}`
+      );
     }
     const parsedMaxTokens = Number(maxTokens);
     if (!Number.isInteger(parsedMaxTokens) || parsedMaxTokens < 1) {
-      throw new Error(`MAX_TOKENS must be a positive integer. Received: ${maxTokens}`);
+      throw new Error(
+        `MAX_TOKENS must be a positive integer. Received: ${maxTokens}`
+      );
     }
 
     try {
@@ -142,7 +181,6 @@ async function run() {
           repo,
           eventName: context.eventName,
           diff,
-          // YangYang /v1/agents loads system prompt from agents.yang-code-review.
           includeSystem: !useYangyangAgent
         }),
         onRetry: (attempt, attempts, error) => {
@@ -152,105 +190,85 @@ async function run() {
         }
       });
 
-      // Log the full accumulated content
       console.log('\n\n=== Yang Code Review (YCR) Result ===');
       console.log(reviewContent);
 
-      // Handle output based on event type
-      if (isPushEvent) {
-        // Save review as artifact for push events
-        try {
-          const artifactFileName = `yang-code-review-${commitSha.substring(0, 7)}-report.md`;
-          const artifactPath = path.resolve(process.cwd(), artifactFileName);
-          
-          // Create the review content with metadata
-          const artifactContent = `# 🤖 Yang Code Review (YCR)\n\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n${reviewContent}`;
-          
-          // Write to file
-          fs.writeFileSync(artifactPath, artifactContent, 'utf8');
-          
-          // Verify file exists before uploading
-          if (!fs.existsSync(artifactPath)) {
-            throw new Error(`Artifact file was not created: ${artifactPath}`);
-          }
-          
-          core.info(`Uploading artifact from ${process.cwd()}`);
-          core.info(`Files: ${[artifactFileName]}`);
-          
-          // Upload artifact - use relative filename from current working directory
-          const {id, size} = await artifact.uploadArtifact(
-            'yang-code-review',
-            [artifactFileName],
-            process.cwd(), // root directory
-            {
-              retentionDays: 90
-            }
-          );
-          
-          console.log(`\n✅ Review saved as artifact: yang-code-review (id: ${id}, bytes: ${size})`);
-        } catch (artifactError) {
-          core.warning(`Failed to save artifact: ${artifactError.message}`);
-          // Don't fail the action if artifact upload fails
-        }
-      } else {
-        // Post review as a comment on the PR for pull_request events
-        const pr = context.payload.pull_request;
-        const pull_number = pr.number;
-        const prSha = pr.head.sha;
-        
-        // Post comment on PR
+      const dateStamp = reportDateStamp();
+      const artifactName = buildArtifactName({
+        date: dateStamp,
+        pullNumber
+      });
+      const shortSha = commitSha.substring(0, 7);
+      const mdFileName = `${artifactName}-${shortSha}.md`;
+      const sarifFileName = `${artifactName}.sarif`;
+      const mdPath = path.resolve(process.cwd(), mdFileName);
+      const sarifPath = path.resolve(process.cwd(), sarifFileName);
+
+      const header = isPushEvent
+        ? `# 🤖 Yang Code Review (YCR)\n\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n`
+        : `# 🤖 Yang Code Review (YCR)\n\n**Pull Request:** #${pullNumber}\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n`;
+
+      const findings = parseFindings(reviewContent);
+      const sarif = buildSarif({
+        findings,
+        reportText: reviewContent,
+        owner,
+        repo,
+        commitSha
+      });
+
+      fs.writeFileSync(mdPath, `${header}${reviewContent}`, 'utf8');
+      fs.writeFileSync(sarifPath, `${JSON.stringify(sarif, null, 2)}\n`, 'utf8');
+      core.setOutput('sarif_path', sarifPath);
+      core.setOutput('artifact_name', artifactName);
+      core.setOutput('findings_count', String(findings.length));
+
+      if (!isPushEvent) {
         try {
           await octokit.rest.issues.createComment({
             owner,
             repo,
-            issue_number: pull_number,
+            issue_number: pullNumber,
             body: `## 🤖 Yang Code Review (YCR)\n\n${reviewContent}`
           });
-          console.log(`\n✅ Review posted as comment on PR #${pull_number}`);
+          console.log(`\n✅ Review posted as comment on PR #${pullNumber}`);
         } catch (commentError) {
           core.warning(`Failed to post comment on PR: ${commentError.message}`);
-          // Don't fail the action if comment posting fails
-        }
-        
-        // Save review as artifact for pull request events
-        try {
-          const artifactFileName = `yang-code-review-pr-${pull_number}-${prSha.substring(0, 7)}-report.md`;
-          const artifactPath = path.resolve(process.cwd(), artifactFileName);
-          
-          // Create the review content with metadata
-          const artifactContent = `# 🤖 Yang Code Review (YCR)\n\n**Pull Request:** #${pull_number}\n**Commit:** ${prSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n${reviewContent}`;
-          
-          // Write to file
-          fs.writeFileSync(artifactPath, artifactContent, 'utf8');
-          
-          // Verify file exists before uploading
-          if (!fs.existsSync(artifactPath)) {
-            throw new Error(`Artifact file was not created: ${artifactPath}`);
-          }
-          
-          core.info(`Uploading artifact from ${process.cwd()}`);
-          core.info(`Files: ${[artifactFileName]}`);
-
-          // Upload artifact - use relative filename from current working directory
-          const {id, size} = await artifact.uploadArtifact(
-            `yang-code-review-pr-${pull_number}`,
-            [artifactFileName],
-            process.cwd(), // root directory
-            {
-              retentionDays: 90
-            }
-          );
-          
-          console.log(`\n✅ Review saved as artifact: yang-code-review-pr-${pull_number} (id: ${id}, bytes: ${size})`);
-        } catch (artifactError) {
-          core.warning(`Failed to save artifact: ${artifactError.message}`);
-          // Don't fail the action if artifact upload fails
         }
       }
 
+      try {
+        core.info(`Uploading artifact ${artifactName}`);
+        await uploadReportArtifact({
+          artifact,
+          name: artifactName,
+          files: [mdFileName, sarifFileName],
+          cwd: process.cwd()
+        });
+      } catch (artifactError) {
+        core.warning(`Failed to save artifact: ${artifactError.message}`);
+      }
+
+      try {
+        const upload = await uploadCodeScanningSarif({
+          octokit,
+          owner,
+          repo,
+          commitSha,
+          ref: gitRef,
+          sarif
+        });
+        console.log(
+          `\n✅ SARIF uploaded to code scanning (id: ${upload.id || 'ok'})`
+        );
+      } catch (sarifError) {
+        core.warning(
+          `Failed to upload SARIF to Security/code scanning: ${sarifError.message}. Need permission security-events: write (and Advanced Security on private repos).`
+        );
+      }
     } catch (error) {
       core.setFailed(error.message);
-    } 
+    }
   } catch (error) {
     core.setFailed(error.message);
   }

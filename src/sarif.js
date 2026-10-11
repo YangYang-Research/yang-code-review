@@ -74,9 +74,11 @@ function normalizeJsonFinding(row) {
     title,
     description: String(row.description || title).trim(),
     impact: String(row.impact || '').trim(),
+    poc: String(row.poc || row.proofOfConcept || row.proof_of_concept || '').trim(),
     recommendation: String(
       row.recommendation || row.remediation || ''
     ).trim(),
+    fix: String(row.fix || row.codeFix || row.code_fix || row.codeExample || '').trim(),
     owasp: String(row.owasp || '').trim(),
     e2eFlow: String(row.e2eFlow || row.flow || '').trim(),
     source: String(row.source || row.changeSource || '').trim(),
@@ -132,7 +134,9 @@ function parseSeverityListFindings(report) {
       title,
       description,
       impact: '',
+      poc: '',
       recommendation: '',
+      fix: '',
       owasp: '',
       e2eFlow: '',
       source: '',
@@ -176,6 +180,7 @@ function parseBracketFindings(report) {
       title,
       description: field('Description') || title,
       impact: field('Impact'),
+      ...extractPocAndFix(field),
       recommendation: field('Recommendation'),
       owasp: field('OWASP'),
       e2eFlow: field('E2E Flow'),
@@ -209,6 +214,7 @@ function parseBoldSeverityFindings(report) {
       title,
       description: field('Description') || title,
       impact: field('Impact'),
+      ...extractPocAndFix(field),
       recommendation: field('Recommendation'),
       owasp: field('OWASP'),
       e2eFlow: field('E2E Flow'),
@@ -256,6 +262,7 @@ function parseBulletFindings(report) {
       title,
       description: field('Description') || title,
       impact: field('Impact'),
+      ...extractPocAndFix(field),
       recommendation: field('Recommendation') || field('Remediation'),
       owasp,
       e2eFlow: field('E2E Flow') || field('Flow'),
@@ -268,6 +275,29 @@ function parseBulletFindings(report) {
   }
 
   return findings;
+}
+
+function extractPocAndFix(field) {
+  return {
+    poc:
+      field('Proof of Concept') ||
+      field('Proof Of Concept') ||
+      field('PoC') ||
+      field('POC') ||
+      '',
+    fix:
+      field('Code Fix') ||
+      field('Code Example') ||
+      field('Fix') ||
+      ''
+  };
+}
+
+function asCodeBlock(code) {
+  const trimmed = String(code || '').trim();
+  if (!trimmed) return '';
+  if (/^```/.test(trimmed)) return trimmed;
+  return '```\n' + trimmed + '\n```';
 }
 
 function extractField(body, name) {
@@ -392,6 +422,14 @@ function helpMarkdown(f) {
     .filter(Boolean)
     .join('\n');
 
+  const remediation = [
+    f.recommendation ? f.recommendation : '',
+    f.fix ? '\n### Code fix\n\n' + asCodeBlock(f.fix) : ''
+  ]
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+
   return [
     '## Overview',
     '',
@@ -402,9 +440,8 @@ function helpMarkdown(f) {
     rows,
     '',
     f.impact ? '## Impact\n\n' + f.impact + '\n' : '',
-    f.recommendation
-      ? '## Remediation\n\n' + f.recommendation + '\n'
-      : '',
+    f.poc ? '## Proof of concept\n\n' + asCodeBlock(f.poc) + '\n' : '',
+    remediation ? '## Remediation\n\n' + remediation + '\n' : '',
     '## References',
     '',
     f.owasp ? `- OWASP: ${f.owasp}` : '- Yang Code Review (YCR)',
@@ -449,7 +486,9 @@ export function buildSarif({
           text: [
             f.description,
             f.impact ? `Impact: ${f.impact}` : '',
+            f.poc ? `Proof of concept: ${f.poc}` : '',
             f.recommendation ? `Remediation: ${f.recommendation}` : '',
+            f.fix ? `Code fix: ${f.fix}` : '',
             f.owasp ? `OWASP: ${f.owasp}` : ''
           ]
             .filter(Boolean)
@@ -545,7 +584,7 @@ export function buildSarif({
         tool: {
           driver: {
             name: 'yang-code-review',
-            version: '1.0.24',
+            version: '1.0.25',
             informationUri:
               'https://github.com/YangYang-Research/yang-code-review',
             rules

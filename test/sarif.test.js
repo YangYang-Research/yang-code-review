@@ -64,7 +64,9 @@ Narrative...
     "owasp": "A03:2021",
     "description": "User input in SQL",
     "impact": "Data leak",
+    "poc": "GET /search?q=1'+OR+'1'='1",
     "recommendation": "Use binds",
+    "fix": "db.query('select 1 where id=$1', [id])",
     "source": "req.body.q",
     "sink": "db.query"
   }
@@ -76,6 +78,8 @@ Narrative...
   assert.equal(findings[0].severity, 'HIGH');
   assert.equal(findings[0].file, 'src/db.js');
   assert.equal(findings[0].line, 42);
+  assert.match(findings[0].poc, /OR/);
+  assert.match(findings[0].fix, /\$1/);
   assert.equal(parseFindings(report)[0].title, 'SQL Injection');
 });
 
@@ -175,6 +179,35 @@ test('buildSarif uses Dependabot-like titles and help.markdown', () => {
   assert.match(rule.help.markdown, /## Remediation/);
   assert.ok(rule.properties.tags.includes('severity/high'));
   assert.equal(rule.properties['security-severity'], '8.0');
+});
+
+test('help.markdown includes Proof of concept and Code fix', () => {
+  const sarif = buildSarif({
+    findings: [
+      {
+        severity: 'HIGH',
+        title: 'XSS',
+        description: 'Reflected XSS',
+        impact: 'Session theft',
+        poc: "GET /?q=<script>alert(1)</script>",
+        recommendation: 'Encode output',
+        fix: "res.send(escapeHtml(q))",
+        owasp: 'A03:2021',
+        file: 'src/app.js',
+        line: 10
+      }
+    ],
+    reportText: '',
+    owner: 'acme',
+    repo: 'app',
+    commitSha: 'abc'
+  });
+  const md = sarif.runs[0].tool.driver.rules[0].help.markdown;
+  assert.match(md, /## Proof of concept/);
+  assert.match(md, /alert\(1\)/);
+  assert.match(md, /## Remediation/);
+  assert.match(md, /### Code fix/);
+  assert.match(md, /escapeHtml/);
 });
 
 test('buildSarif falls back when no structured findings', () => {

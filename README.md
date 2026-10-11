@@ -101,7 +101,7 @@ After each run the action:
    `yang-code-review-report-<YYYY-MM-DD>-pr-<pr_id>` (PR) or  
    `yang-code-review-report-<YYYY-MM-DD>` (push)
 2. Uploads SARIF via `github/codeql-action/upload-sarif@v4` → **Security and quality → Code scanning**  
-   Alerts are Dependabot-style: short severity title, Overview / Impact / Remediation markdown, severity tags.
+   Alerts are Dependabot-style: short severity title, Overview / Impact / Proof of concept / Remediation (+ Code fix) markdown, severity tags.
 
 Needs `security-events: write`. Private/internal repos also need GitHub Code Security / Advanced Security.
 

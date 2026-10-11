@@ -39741,6 +39741,9 @@ function parseFindings(report) {
   const bracket = parseBracketFindings(report);
   if (bracket.length > 0) return bracket;
 
+  const bold = parseBoldSeverityFindings(report);
+  if (bold.length > 0) return bold;
+
   const bullets = parseBulletFindings(report);
   if (bullets.length > 0) return bullets;
 
@@ -39751,6 +39754,37 @@ function parseBracketFindings(report) {
   const findings = [];
   const blockRe =
     /\[(CRITICAL|HIGH|MEDIUM|LOW|INFO)\]\s*([^\n]+)\n([\s\S]*?)(?=\n\[(?:CRITICAL|HIGH|MEDIUM|LOW|INFO)\]|\n### Report Generated|$)/gi;
+
+  let match;
+  while ((match = blockRe.exec(report)) !== null) {
+    const body = match[3] || '';
+    const field = (name) => extractField(body, name);
+    const locationRaw = field('Location');
+    const {file, line} = parseLocation(locationRaw);
+    const title = match[2].trim();
+    findings.push({
+      severity: match[1].toUpperCase(),
+      title,
+      description: field('Description') || title,
+      impact: field('Impact'),
+      recommendation: field('Recommendation'),
+      owasp: field('OWASP'),
+      e2eFlow: field('E2E Flow'),
+      source: field('Change/Source') || field('Source'),
+      sink: field('Sink'),
+      file,
+      line,
+      rawLocation: locationRaw
+    });
+  }
+  return findings;
+}
+
+/** **MEDIUM Title** + Field: value lines (common YangYang agent shape). */
+function parseBoldSeverityFindings(report) {
+  const findings = [];
+  const blockRe =
+    /\*\*(CRITICAL|HIGH|MEDIUM|LOW|INFO)\s+([^*]+)\*\*\s*\n([\s\S]*?)(?=\n\*\*(?:CRITICAL|HIGH|MEDIUM|LOW|INFO)\s+|\n### Report Generated|$)/gi;
 
   let match;
   while ((match = blockRe.exec(report)) !== null) {
@@ -39874,11 +39908,14 @@ function parseLocation(raw) {
   const cleaned = stripMd(raw)
     .replace(/^[ab]\//, '')
     .replace(/^\.\//, '');
-  // path:line or path:line:col — stop before " (note)"
-  const m = cleaned.match(/^([^\s:(]+?\.[A-Za-z0-9]+):(\d+)(?::\d+)?/);
-  if (m) {
-    return {file: m[1], line: Number(m[2])};
+  // path:line or path:line:col
+  const withLine = cleaned.match(
+    /^([^\s:(]+?\.[A-Za-z0-9]+):(\d+)(?::\d+)?(?:\b|$|\s|\()/
+  );
+  if (withLine) {
+    return {file: withLine[1], line: Number(withLine[2])};
   }
+  // path:symbol (e.g. src/sarif.js:parseLocation) or bare path
   const pathOnly = cleaned.match(/^([^\s:(]+?\.[A-Za-z0-9]+)/);
   if (pathOnly) {
     return {file: pathOnly[1], line: undefined};
@@ -40092,7 +40129,7 @@ function buildSarif({
         tool: {
           driver: {
             name: 'yang-code-review',
-            version: '1.0.21',
+            version: '1.0.22',
             informationUri:
               'https://github.com/YangYang-Research/yang-code-review',
             rules

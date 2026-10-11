@@ -68,11 +68,11 @@ function parseBracketFindings(report) {
   return findings;
 }
 
-/** **MEDIUM Title** + Field: value lines (common YangYang agent shape). */
+/** **MEDIUM Title** (+ optional "1. ") then Field / "* Field:" lines. */
 function parseBoldSeverityFindings(report) {
   const findings = [];
   const blockRe =
-    /\*\*(CRITICAL|HIGH|MEDIUM|LOW|INFO)\s+([^*]+)\*\*\s*\n([\s\S]*?)(?=\n\*\*(?:CRITICAL|HIGH|MEDIUM|LOW|INFO)\s+|\n### Report Generated|$)/gi;
+    /(?:^|\n)\s*(?:\d+\.\s*)?\*\*(CRITICAL|HIGH|MEDIUM|LOW|INFO)\s+([^*]+)\*\*\s*\n([\s\S]*?)(?=\n\s*(?:\d+\.\s*)?\*\*(?:CRITICAL|HIGH|MEDIUM|LOW|INFO)\s+|\n### Report Generated|$)/gi;
 
   let match;
   while ((match = blockRe.exec(report)) !== null) {
@@ -81,6 +81,8 @@ function parseBoldSeverityFindings(report) {
     const locationRaw = field('Location');
     const {file, line} = parseLocation(locationRaw);
     const title = match[2].trim();
+    // Skip meta mentions of the parser itself (e.g. "**MEDIUM Title** understanding").
+    if (/^(title|bullet)\b/i.test(title)) continue;
     findings.push({
       severity: match[1].toUpperCase(),
       title,
@@ -148,8 +150,13 @@ function parseBulletFindings(report) {
 }
 
 function extractField(body, name) {
-  const m = body.match(new RegExp(`^${escapeRegExp(name)}:\\s*(.+)$`, 'im'));
-  return m ? m[1].trim() : '';
+  const m = body.match(
+    new RegExp(
+      `^[\\t ]*(?:[-*]\\s*)?(?:\\*\\*)?${escapeRegExp(name)}(?:\\*\\*)?:\\s*(.+)$`,
+      'im'
+    )
+  );
+  return m ? stripMd(m[1]) : '';
 }
 
 function extractBulletField(body, name) {
@@ -417,7 +424,7 @@ export function buildSarif({
         tool: {
           driver: {
             name: 'yang-code-review',
-            version: '1.0.22',
+            version: '1.0.23',
             informationUri:
               'https://github.com/YangYang-Research/yang-code-review',
             rules

@@ -97,8 +97,10 @@ This feeds GitHub Code Scanning (Dependabot-style alerts). No prose inside the f
   {
     "severity": "HIGH",
     "title": "Short vulnerability name",
-    "file": "path/to/file.ext",
+    "file": "path/to/source.ext",
     "line": 42,
+    "endLine": 45,
+    "snippet": "only the vulnerable lines (1-15 lines, not the whole file)",
     "owasp": "API1:2023 Broken Object Level Authorization",
     "description": "What is wrong",
     "impact": "Why it matters",
@@ -113,8 +115,9 @@ This feeds GitHub Code Scanning (Dependabot-style alerts). No prose inside the f
 
 Rules for the JSON:
 - \`severity\` must be one of CRITICAL|HIGH|MEDIUM|LOW|INFO
-- \`file\` repo-relative path when known; omit or null if unknown
-- \`line\` integer >= 1 when known; omit or null if unknown
+- \`file\` must be a **source** path (e.g. \`src/...\`). Never \`dist/\`, \`build/\`, \`node_modules/\`, \`*.min.js\`, or bundled/generated output
+- \`line\` / \`endLine\` point at the vulnerable region only (\`endLine - line\` <= 20). Never pin a single huge generated line
+- \`snippet\` required: copy **only** the vulnerable lines (max ~15 lines / 2KB) so GitHub can preview the issue without loading the whole file
 - \`poc\` required for CRITICAL/HIGH/MEDIUM when exploitable; omit only if truly not applicable
 - \`fix\` required whenever a code change remediates the finding (patched snippet, not just prose)
 - \`recommendation\` is the prose remediation; put code in \`fix\`
@@ -156,7 +159,7 @@ export function buildReviewMessages({owner, repo, eventName, diff, includeSystem
     role: 'user',
     content: `First, classify which security domain(s) this diff belongs to and select the matching OWASP catalog(s) (web, mobile, API, LLM, machine learning, MCP, IoT, IaC, etc.). Then identify end-to-end flows the change can affect and review those flows (not only each file in isolation). In findings, include Change/Source and Sink when a path exists. Do not emit an OWASP Secure Code Review Checklist.
 
-REQUIRED: end the response with a fenced \`\`\`ycr-findings JSON array (objects with severity, title, file, line, owasp, description, impact, poc, recommendation, fix, source, sink). Include Proof of Concept (\`poc\`) and Code Fix (\`fix\`) whenever applicable. Use [] if none. This powers GitHub Code Scanning alerts.
+REQUIRED: end the response with a fenced \`\`\`ycr-findings JSON array (objects with severity, title, file, line, endLine, snippet, owasp, description, impact, poc, recommendation, fix, source, sink). Cite source files only (never dist/bundles). \`snippet\` = only the vulnerable lines. Include \`poc\` and \`fix\` when applicable. Use [] if none. This powers GitHub Code Scanning alerts.
 
 Review the following untrusted unified diff.
 

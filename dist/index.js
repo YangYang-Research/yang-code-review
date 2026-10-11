@@ -39673,8 +39673,10 @@ This feeds GitHub Code Scanning (Dependabot-style alerts). No prose inside the f
   {
     "severity": "HIGH",
     "title": "Short vulnerability name",
-    "file": "path/to/file.ext",
+    "file": "path/to/source.ext",
     "line": 42,
+    "endLine": 45,
+    "snippet": "only the vulnerable lines (1-15 lines, not the whole file)",
     "owasp": "API1:2023 Broken Object Level Authorization",
     "description": "What is wrong",
     "impact": "Why it matters",
@@ -39689,8 +39691,9 @@ This feeds GitHub Code Scanning (Dependabot-style alerts). No prose inside the f
 
 Rules for the JSON:
 - \`severity\` must be one of CRITICAL|HIGH|MEDIUM|LOW|INFO
-- \`file\` repo-relative path when known; omit or null if unknown
-- \`line\` integer >= 1 when known; omit or null if unknown
+- \`file\` must be a **source** path (e.g. \`src/...\`). Never \`dist/\`, \`build/\`, \`node_modules/\`, \`*.min.js\`, or bundled/generated output
+- \`line\` / \`endLine\` point at the vulnerable region only (\`endLine - line\` <= 20). Never pin a single huge generated line
+- \`snippet\` required: copy **only** the vulnerable lines (max ~15 lines / 2KB) so GitHub can preview the issue without loading the whole file
 - \`poc\` required for CRITICAL/HIGH/MEDIUM when exploitable; omit only if truly not applicable
 - \`fix\` required whenever a code change remediates the finding (patched snippet, not just prose)
 - \`recommendation\` is the prose remediation; put code in \`fix\`
@@ -39732,7 +39735,7 @@ function buildReviewMessages({owner, repo, eventName, diff, includeSystem = true
     role: 'user',
     content: `First, classify which security domain(s) this diff belongs to and select the matching OWASP catalog(s) (web, mobile, API, LLM, machine learning, MCP, IoT, IaC, etc.). Then identify end-to-end flows the change can affect and review those flows (not only each file in isolation). In findings, include Change/Source and Sink when a path exists. Do not emit an OWASP Secure Code Review Checklist.
 
-REQUIRED: end the response with a fenced \`\`\`ycr-findings JSON array (objects with severity, title, file, line, owasp, description, impact, poc, recommendation, fix, source, sink). Include Proof of Concept (\`poc\`) and Code Fix (\`fix\`) whenever applicable. Use [] if none. This powers GitHub Code Scanning alerts.
+REQUIRED: end the response with a fenced \`\`\`ycr-findings JSON array (objects with severity, title, file, line, endLine, snippet, owasp, description, impact, poc, recommendation, fix, source, sink). Cite source files only (never dist/bundles). \`snippet\` = only the vulnerable lines. Include \`poc\` and \`fix\` when applicable. Use [] if none. This powers GitHub Code Scanning alerts.
 
 Review the following untrusted unified diff.
 
@@ -39820,24 +39823,45 @@ function normalizeJsonFinding(row) {
   const fileRaw = row.file || row.path || row.location || '';
   const {file, line: lineFromLoc} = parseLocation(String(fileRaw || ''));
   const lineNum = Number(row.line);
+  const endLineNum = Number(row.endLine ?? row.lineEnd ?? row.end_line);
+  const snippet = String(
+    row.snippet || row.evidence || row.vulnerableCode || ''
+  ).trim();
+  const poc = String(
+    row.poc || row.proofOfConcept || row.proof_of_concept || ''
+  ).trim();
   return {
     severity,
     title,
     description: String(row.description || title).trim(),
     impact: String(row.impact || '').trim(),
-    poc: String(row.poc || row.proofOfConcept || row.proof_of_concept || '').trim(),
+    poc,
     recommendation: String(
       row.recommendation || row.remediation || ''
     ).trim(),
     fix: String(row.fix || row.codeFix || row.code_fix || row.codeExample || '').trim(),
+    snippet: snippet || snippetFromPoc(poc),
     owasp: String(row.owasp || '').trim(),
     e2eFlow: String(row.e2eFlow || row.flow || '').trim(),
     source: String(row.source || row.changeSource || '').trim(),
     sink: String(row.sink || '').trim(),
     file: file || undefined,
     line: Number.isInteger(lineNum) && lineNum > 0 ? lineNum : lineFromLoc,
+    endLine:
+      Number.isInteger(endLineNum) && endLineNum > 0 ? endLineNum : undefined,
     rawLocation: String(fileRaw || '')
   };
+}
+
+function snippetFromPoc(poc) {
+  if (!poc) return '';
+  const fence = poc.match(/```(?:[a-zA-Z0-9_+-]*)?\n([\s\S]*?)\n```/);
+  if (fence) return fence[1].trim();
+  // Keep short PoC text as preview snippet (not whole essay).
+  const lines = poc.split('\n').filter((l) => l.trim());
+  if (lines.length === 0) return '';
+  if (lines.length <= 15 && poc.length <= 2000) return poc.trim();
+  return lines.slice(0, 12).join('\n').slice(0, 2000);
 }
 
 /**
@@ -40120,9 +40144,31 @@ function parseLocation(raw) {
   return {file: cleaned.split(/\s+/)[0] || undefined, line: undefined};
 }
 
+/** Generated/minified paths make GitHub Code Scanning preview fail. */
+function isGeneratedPath(file) {
+  if (!file) return false;
+  const f = file.replace(/\\/g, '/');
+  return (
+    /(^|\/)(dist|build|out|coverage|\.next|vendor|node_modules)(\/|$)/i.test(
+      f
+    ) ||
+    /\.(min|bundle)\.[A-Za-z0-9]+$/i.test(f) ||
+    /(^|\/)dist\/index\.js$/i.test(f)
+  );
+}
+
 /** Prefer a path that exists in the workspace (e.g. index.js → src/index.js). */
 function resolveFindingPath(file, existsFn) {
   if (!file) return undefined;
+  if (isGeneratedPath(file)) {
+    const base = file.replace(/\\/g, '/').split('/').pop();
+    const candidates = [`src/${base}`, `lib/${base}`, `app/${base}`];
+    for (const c of candidates) {
+      if (existsFn(c)) return c;
+    }
+    // Drop bundle paths — caller will use fallback + snippet.
+    return undefined;
+  }
   if (existsFn(file)) return file;
   const candidates = [`src/${file}`, `lib/${file}`, `app/${file}`];
   for (const c of candidates) {
@@ -40131,18 +40177,60 @@ function resolveFindingPath(file, existsFn) {
   return file;
 }
 
-/** GitHub code scanning rejects results with zero locations. */
-function buildLocation(file, line, fallbackUri) {
-  const uri = (file || fallbackUri || 'README.md').replace(/^\.\//, '');
-  const physicalLocation = {
-    artifactLocation: {uri, uriBaseId: '%SRCROOT%'}
-  };
-  if (Number.isInteger(line) && line > 0) {
-    physicalLocation.region = {startLine: line};
-  } else {
-    physicalLocation.region = {startLine: 1};
+const MAX_SNIPPET_CHARS = 2000;
+const MAX_REGION_LINES = 20;
+
+function truncateSnippet(text) {
+  const t = String(text || '').trim();
+  if (!t) return '';
+  if (t.length <= MAX_SNIPPET_CHARS) return t;
+  return t.slice(0, MAX_SNIPPET_CHARS) + '\n…';
+}
+
+/**
+ * GitHub code scanning rejects results with zero locations.
+ * Always pin a small region + optional snippet so the UI shows the bad
+ * lines instead of trying to preview a whole minified/bundle file.
+ */
+function buildLocation({
+  file,
+  line,
+  endLine,
+  snippet,
+  fallbackUri = 'README.md'
+} = {}) {
+  let uri = (file || fallbackUri || 'README.md').replace(/^\.\//, '');
+  let start = Number.isInteger(line) && line > 0 ? line : undefined;
+  let end =
+    Number.isInteger(endLine) && endLine > 0 ? endLine : undefined;
+
+  if (isGeneratedPath(uri)) {
+    uri = fallbackUri || 'README.md';
+    start = 1;
+    end = 1;
   }
-  return [{physicalLocation}];
+
+  if (!start) start = 1;
+  if (!end || end < start) end = start;
+  if (end - start > MAX_REGION_LINES) end = start + MAX_REGION_LINES;
+
+  const region = {
+    startLine: start,
+    endLine: end
+  };
+  const snip = truncateSnippet(snippet);
+  if (snip) {
+    region.snippet = {text: snip};
+  }
+
+  return [
+    {
+      physicalLocation: {
+        artifactLocation: {uri, uriBaseId: '%SRCROOT%'},
+        region
+      }
+    }
+  ];
 }
 
 function ruleIdFor(finding, index) {
@@ -40269,7 +40357,13 @@ function buildSarif({
       message: {
         text: alertTitle(f)
       },
-      locations: buildLocation(f.file, f.line, fallbackUri),
+      locations: buildLocation({
+        file: f.file,
+        line: f.line,
+        endLine: f.endLine,
+        snippet: f.snippet || snippetFromPoc(f.poc),
+        fallbackUri
+      }),
       properties: {
         tags: ['security'],
         'security-severity': securitySeverityScore(f.severity)
@@ -40290,7 +40384,8 @@ function buildSarif({
       source: '',
       sink: '',
       file: fallbackUri,
-      line: 1
+      line: 1,
+      snippet: reportText.slice(0, 800)
     };
     rules.push({
       id: 'ycr-report',
@@ -40308,7 +40403,7 @@ function buildSarif({
           '',
           '## Details',
           '',
-          reportText.slice(0, 60_000)
+          reportText.slice(0, 4_000)
         ].join('\n')
       },
       defaultConfiguration: {level: 'note'},
@@ -40322,7 +40417,13 @@ function buildSarif({
       ruleId: 'ycr-report',
       level: 'note',
       message: {text: 'Info severity - Yang Code Review report'},
-      locations: buildLocation(fallback.file, 1, fallbackUri),
+      locations: buildLocation({
+        file: fallback.file,
+        line: 1,
+        endLine: 1,
+        snippet: fallback.snippet,
+        fallbackUri
+      }),
       properties: {'security-severity': '0.0'}
     });
   }
@@ -40335,7 +40436,7 @@ function buildSarif({
         tool: {
           driver: {
             name: 'yang-code-review',
-            version: '1.0.25',
+            version: '1.0.26',
             informationUri:
               'https://github.com/YangYang-Research/yang-code-review',
             rules
@@ -40626,12 +40727,20 @@ async function run() {
         ? `# 🤖 Yang Code Review (YCR)\n\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n`
         : `# 🤖 Yang Code Review (YCR)\n\n**Pull Request:** #${pullNumber}\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n`;
 
-      const findings = parseFindings(reviewContent).map((f) => ({
-        ...f,
-        file: resolveFindingPath(f.file, (p) =>
+      const findings = parseFindings(reviewContent).map((f) => {
+        const wasGenerated = isGeneratedPath(f.file);
+        const resolved = resolveFindingPath(f.file, (p) =>
           external_fs_.existsSync(external_path_.resolve(process.cwd(), p))
-        )
-      }));
+        );
+        // Drop huge-line pins on bundles (GitHub preview: "snippet too large/minified").
+        const dropPin = wasGenerated && !resolved;
+        return {
+          ...f,
+          file: resolved,
+          line: dropPin ? undefined : f.line,
+          endLine: dropPin ? undefined : f.endLine
+        };
+      });
       const sarif = buildSarif({
         findings,
         reportText: reviewContent,

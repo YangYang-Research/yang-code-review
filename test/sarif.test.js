@@ -3,8 +3,10 @@ import test from 'node:test';
 
 import {
   buildArtifactName,
+  buildLocation,
   buildSarif,
   formatDependabotStyleComment,
+  isGeneratedPath,
   parseFindings,
   parseJsonFindings,
   reportDateStamp,
@@ -245,6 +247,39 @@ test('resolveFindingPath prefers existing workspace file', () => {
     resolveFindingPath('src/db.js', (p) => p === 'src/db.js'),
     'src/db.js'
   );
+});
+
+test('buildLocation drops dist bundles and attaches a short snippet', () => {
+  assert.equal(isGeneratedPath('dist/index.js'), true);
+  assert.equal(
+    resolveFindingPath('dist/index.js', () => false),
+    undefined
+  );
+  const [loc] = buildLocation({
+    file: 'dist/index.js',
+    line: 39658,
+    endLine: 39658,
+    snippet: 'const x = eval(userInput)',
+    fallbackUri: 'README.md'
+  });
+  assert.equal(loc.physicalLocation.artifactLocation.uri, 'README.md');
+  assert.equal(loc.physicalLocation.region.startLine, 1);
+  assert.equal(loc.physicalLocation.region.endLine, 1);
+  assert.equal(
+    loc.physicalLocation.region.snippet.text,
+    'const x = eval(userInput)'
+  );
+
+  const [srcLoc] = buildLocation({
+    file: 'src/app.js',
+    line: 10,
+    endLine: 100,
+    snippet: 'a\nb\nc'
+  });
+  assert.equal(srcLoc.physicalLocation.artifactLocation.uri, 'src/app.js');
+  assert.equal(srcLoc.physicalLocation.region.startLine, 10);
+  assert.equal(srcLoc.physicalLocation.region.endLine, 30);
+  assert.equal(srcLoc.physicalLocation.region.snippet.text, 'a\nb\nc');
 });
 
 test('artifact name uses date and optional PR id', () => {

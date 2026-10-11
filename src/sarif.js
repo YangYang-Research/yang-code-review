@@ -69,24 +69,45 @@ function normalizeJsonFinding(row) {
   const fileRaw = row.file || row.path || row.location || '';
   const {file, line: lineFromLoc} = parseLocation(String(fileRaw || ''));
   const lineNum = Number(row.line);
+  const endLineNum = Number(row.endLine ?? row.lineEnd ?? row.end_line);
+  const snippet = String(
+    row.snippet || row.evidence || row.vulnerableCode || ''
+  ).trim();
+  const poc = String(
+    row.poc || row.proofOfConcept || row.proof_of_concept || ''
+  ).trim();
   return {
     severity,
     title,
     description: String(row.description || title).trim(),
     impact: String(row.impact || '').trim(),
-    poc: String(row.poc || row.proofOfConcept || row.proof_of_concept || '').trim(),
+    poc,
     recommendation: String(
       row.recommendation || row.remediation || ''
     ).trim(),
     fix: String(row.fix || row.codeFix || row.code_fix || row.codeExample || '').trim(),
+    snippet: snippet || snippetFromPoc(poc),
     owasp: String(row.owasp || '').trim(),
     e2eFlow: String(row.e2eFlow || row.flow || '').trim(),
     source: String(row.source || row.changeSource || '').trim(),
     sink: String(row.sink || '').trim(),
     file: file || undefined,
     line: Number.isInteger(lineNum) && lineNum > 0 ? lineNum : lineFromLoc,
+    endLine:
+      Number.isInteger(endLineNum) && endLineNum > 0 ? endLineNum : undefined,
     rawLocation: String(fileRaw || '')
   };
+}
+
+function snippetFromPoc(poc) {
+  if (!poc) return '';
+  const fence = poc.match(/```(?:[a-zA-Z0-9_+-]*)?\n([\s\S]*?)\n```/);
+  if (fence) return fence[1].trim();
+  // Keep short PoC text as preview snippet (not whole essay).
+  const lines = poc.split('\n').filter((l) => l.trim());
+  if (lines.length === 0) return '';
+  if (lines.length <= 15 && poc.length <= 2000) return poc.trim();
+  return lines.slice(0, 12).join('\n').slice(0, 2000);
 }
 
 /**
@@ -369,9 +390,31 @@ function parseLocation(raw) {
   return {file: cleaned.split(/\s+/)[0] || undefined, line: undefined};
 }
 
+/** Generated/minified paths make GitHub Code Scanning preview fail. */
+export function isGeneratedPath(file) {
+  if (!file) return false;
+  const f = file.replace(/\\/g, '/');
+  return (
+    /(^|\/)(dist|build|out|coverage|\.next|vendor|node_modules)(\/|$)/i.test(
+      f
+    ) ||
+    /\.(min|bundle)\.[A-Za-z0-9]+$/i.test(f) ||
+    /(^|\/)dist\/index\.js$/i.test(f)
+  );
+}
+
 /** Prefer a path that exists in the workspace (e.g. index.js → src/index.js). */
 export function resolveFindingPath(file, existsFn) {
   if (!file) return undefined;
+  if (isGeneratedPath(file)) {
+    const base = file.replace(/\\/g, '/').split('/').pop();
+    const candidates = [`src/${base}`, `lib/${base}`, `app/${base}`];
+    for (const c of candidates) {
+      if (existsFn(c)) return c;
+    }
+    // Drop bundle paths — caller will use fallback + snippet.
+    return undefined;
+  }
   if (existsFn(file)) return file;
   const candidates = [`src/${file}`, `lib/${file}`, `app/${file}`];
   for (const c of candidates) {
@@ -380,18 +423,60 @@ export function resolveFindingPath(file, existsFn) {
   return file;
 }
 
-/** GitHub code scanning rejects results with zero locations. */
-export function buildLocation(file, line, fallbackUri) {
-  const uri = (file || fallbackUri || 'README.md').replace(/^\.\//, '');
-  const physicalLocation = {
-    artifactLocation: {uri, uriBaseId: '%SRCROOT%'}
-  };
-  if (Number.isInteger(line) && line > 0) {
-    physicalLocation.region = {startLine: line};
-  } else {
-    physicalLocation.region = {startLine: 1};
+const MAX_SNIPPET_CHARS = 2000;
+const MAX_REGION_LINES = 20;
+
+function truncateSnippet(text) {
+  const t = String(text || '').trim();
+  if (!t) return '';
+  if (t.length <= MAX_SNIPPET_CHARS) return t;
+  return t.slice(0, MAX_SNIPPET_CHARS) + '\n…';
+}
+
+/**
+ * GitHub code scanning rejects results with zero locations.
+ * Always pin a small region + optional snippet so the UI shows the bad
+ * lines instead of trying to preview a whole minified/bundle file.
+ */
+export function buildLocation({
+  file,
+  line,
+  endLine,
+  snippet,
+  fallbackUri = 'README.md'
+} = {}) {
+  let uri = (file || fallbackUri || 'README.md').replace(/^\.\//, '');
+  let start = Number.isInteger(line) && line > 0 ? line : undefined;
+  let end =
+    Number.isInteger(endLine) && endLine > 0 ? endLine : undefined;
+
+  if (isGeneratedPath(uri)) {
+    uri = fallbackUri || 'README.md';
+    start = 1;
+    end = 1;
   }
-  return [{physicalLocation}];
+
+  if (!start) start = 1;
+  if (!end || end < start) end = start;
+  if (end - start > MAX_REGION_LINES) end = start + MAX_REGION_LINES;
+
+  const region = {
+    startLine: start,
+    endLine: end
+  };
+  const snip = truncateSnippet(snippet);
+  if (snip) {
+    region.snippet = {text: snip};
+  }
+
+  return [
+    {
+      physicalLocation: {
+        artifactLocation: {uri, uriBaseId: '%SRCROOT%'},
+        region
+      }
+    }
+  ];
 }
 
 function ruleIdFor(finding, index) {
@@ -518,7 +603,13 @@ export function buildSarif({
       message: {
         text: alertTitle(f)
       },
-      locations: buildLocation(f.file, f.line, fallbackUri),
+      locations: buildLocation({
+        file: f.file,
+        line: f.line,
+        endLine: f.endLine,
+        snippet: f.snippet || snippetFromPoc(f.poc),
+        fallbackUri
+      }),
       properties: {
         tags: ['security'],
         'security-severity': securitySeverityScore(f.severity)
@@ -539,7 +630,8 @@ export function buildSarif({
       source: '',
       sink: '',
       file: fallbackUri,
-      line: 1
+      line: 1,
+      snippet: reportText.slice(0, 800)
     };
     rules.push({
       id: 'ycr-report',
@@ -557,7 +649,7 @@ export function buildSarif({
           '',
           '## Details',
           '',
-          reportText.slice(0, 60_000)
+          reportText.slice(0, 4_000)
         ].join('\n')
       },
       defaultConfiguration: {level: 'note'},
@@ -571,7 +663,13 @@ export function buildSarif({
       ruleId: 'ycr-report',
       level: 'note',
       message: {text: 'Info severity - Yang Code Review report'},
-      locations: buildLocation(fallback.file, 1, fallbackUri),
+      locations: buildLocation({
+        file: fallback.file,
+        line: 1,
+        endLine: 1,
+        snippet: fallback.snippet,
+        fallbackUri
+      }),
       properties: {'security-severity': '0.0'}
     });
   }
@@ -584,7 +682,7 @@ export function buildSarif({
         tool: {
           driver: {
             name: 'yang-code-review',
-            version: '1.0.25',
+            version: '1.0.26',
             informationUri:
               'https://github.com/YangYang-Research/yang-code-review',
             rules

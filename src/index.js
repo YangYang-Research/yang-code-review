@@ -8,6 +8,7 @@ import {
   buildArtifactName,
   buildSarif,
   formatDependabotStyleComment,
+  isGeneratedPath,
   parseFindings,
   reportDateStamp,
   resolveFindingPath
@@ -173,12 +174,20 @@ async function run() {
         ? `# 🤖 Yang Code Review (YCR)\n\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n`
         : `# 🤖 Yang Code Review (YCR)\n\n**Pull Request:** #${pullNumber}\n**Commit:** ${commitSha}\n**Repository:** ${owner}/${repo}\n**Date:** ${new Date().toISOString()}\n\n---\n\n`;
 
-      const findings = parseFindings(reviewContent).map((f) => ({
-        ...f,
-        file: resolveFindingPath(f.file, (p) =>
+      const findings = parseFindings(reviewContent).map((f) => {
+        const wasGenerated = isGeneratedPath(f.file);
+        const resolved = resolveFindingPath(f.file, (p) =>
           fs.existsSync(path.resolve(process.cwd(), p))
-        )
-      }));
+        );
+        // Drop huge-line pins on bundles (GitHub preview: "snippet too large/minified").
+        const dropPin = wasGenerated && !resolved;
+        return {
+          ...f,
+          file: resolved,
+          line: dropPin ? undefined : f.line,
+          endLine: dropPin ? undefined : f.endLine
+        };
+      });
       const sarif = buildSarif({
         findings,
         reportText: reviewContent,

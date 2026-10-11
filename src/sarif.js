@@ -161,7 +161,7 @@ export function buildSarif({
         tool: {
           driver: {
             name: 'yang-code-review',
-            version: '1.0.19',
+            version: '1.0.20',
             informationUri:
               'https://github.com/YangYang-Research/yang-code-review',
             rules

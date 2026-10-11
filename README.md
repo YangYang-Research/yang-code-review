@@ -66,7 +66,7 @@ on:
 
 jobs:
   code-review:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       pull-requests: write

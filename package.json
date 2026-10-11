@@ -1,6 +1,6 @@
 {
     "name": "yang-code-review",
-    "version": "1.0.19",
+    "version": "1.0.20",
     "description": "YangYang Code Review (YCR) for Pull Requests",
     "type": "module",
     "main": "dist/index.js",

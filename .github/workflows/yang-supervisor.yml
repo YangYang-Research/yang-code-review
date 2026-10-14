@@ -23,7 +23,7 @@ jobs:
           private-key: ${{ secrets.YANG_SUPERVISOR_APP_PRIVATE_KEY }}
 
       - name: yang-supervisor
-        uses: YangYang-Research/yang-supervisor@v0.1.0
+        uses: YangYang-Research/yang-supervisor@v0.1.1
         with:
           PROVIDER: yangyang
           API_KEY: ${{ secrets.YANG_API_TOKEN }}

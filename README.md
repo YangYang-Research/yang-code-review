@@ -40,7 +40,9 @@ Provider base URLs are hardcoded in the action:
 ## 🔐 Required Secrets
 
 - `API_KEY` — key for the selected provider
-- `GITHUB_TOKEN` — GitHub token used to read changes and post PR comments
+- `GITHUB_TOKEN` — GitHub token used to read changes, post PR comments, and add the `ai-review` label
+
+After a successful PR review, YCR ensures the repo label `ai-review` exists and applies it to the pull request.
 
 ## ⚙️ Inputs
 

@@ -40567,6 +40567,41 @@ function buildArtifactName({date, pullNumber}) {
 
 
 
+const AI_REVIEW_LABEL = 'ai-review';
+const AI_REVIEW_LABEL_COLOR = '5319E7';
+const AI_REVIEW_LABEL_DESCRIPTION = 'Reviewed by Yang Code Review (YCR)';
+
+async function ensureAiReviewLabel(octokit, {owner, repo}) {
+  try {
+    await octokit.rest.issues.getLabel({
+      owner,
+      repo,
+      name: AI_REVIEW_LABEL
+    });
+  } catch (error) {
+    if (error.status !== 404) {
+      throw error;
+    }
+    await octokit.rest.issues.createLabel({
+      owner,
+      repo,
+      name: AI_REVIEW_LABEL,
+      color: AI_REVIEW_LABEL_COLOR,
+      description: AI_REVIEW_LABEL_DESCRIPTION
+    });
+  }
+}
+
+async function addAiReviewLabel(octokit, {owner, repo, issueNumber}) {
+  await ensureAiReviewLabel(octokit, {owner, repo});
+  await octokit.rest.issues.addLabels({
+    owner,
+    repo,
+    issue_number: issueNumber,
+    labels: [AI_REVIEW_LABEL]
+  });
+}
+
 async function run() {
   try {
     const provider = core.getInput('PROVIDER', {required: true});
@@ -40772,6 +40807,19 @@ async function run() {
           console.log(`\n✅ Review posted as comment on PR #${pullNumber}`);
         } catch (commentError) {
           core.warning(`Failed to post comment on PR: ${commentError.message}`);
+        }
+
+        try {
+          await addAiReviewLabel(octokit, {
+            owner,
+            repo,
+            issueNumber: pullNumber
+          });
+          console.log(`\n✅ Added label "${AI_REVIEW_LABEL}" on PR #${pullNumber}`);
+        } catch (labelError) {
+          core.warning(
+            `Failed to add "${AI_REVIEW_LABEL}" label: ${labelError.message}`
+          );
         }
       }
     } catch (error) {

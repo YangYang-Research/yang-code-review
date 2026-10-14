@@ -2,8 +2,8 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import fs from 'fs';
 import path from 'path';
-import {requestReview, resolveProviderConfig} from './providers.js';
-import {buildReviewMessages} from './prompt.js';
+import {resolveProviderConfig} from './providers.js';
+import {requestReviewWithSplit} from './splitReview.js';
 import {
   buildArtifactName,
   buildSarif,
@@ -171,22 +171,33 @@ async function run() {
 
     try {
       const useYangyangAgent = providerConfig.name === 'yangyang';
-      const reviewContent = await requestReview({
+      const reviewContent = await requestReviewWithSplit({
         config: providerConfig,
         model: modelName,
         temperature: parsedTemperature,
         maxTokens: parsedMaxTokens,
         agent: useYangyangAgent ? 'yang-code-review' : undefined,
-        messages: buildReviewMessages({
-          owner,
-          repo,
-          eventName: context.eventName,
-          diff,
-          includeSystem: !useYangyangAgent
-        }),
+        owner,
+        repo,
+        eventName: context.eventName,
+        diff,
+        includeSystem: !useYangyangAgent,
         onRetry: (attempt, attempts, error) => {
           core.warning(
             `${providerConfig.name} attempt ${attempt}/${attempts} failed: ${error.message}. Retrying...`
+          );
+        },
+        onSplit: ({actual, limit, chunkCount, maxDiffChars}) => {
+          core.warning(
+            `Input tokens exceed limit (${actual ?? '?'} > ${limit}). Splitting diff into ${chunkCount} parts (≈${maxDiffChars} chars/part), then refining.`
+          );
+        },
+        onPart: ({index, total, chars}) => {
+          core.info(`Reviewing split part ${index}/${total} (${chars} chars)…`);
+        },
+        onRefine: ({partialCount}) => {
+          core.info(
+            `Merging ${partialCount} partial reviews into one refined YCR report…`
           );
         }
       });

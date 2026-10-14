@@ -15,10 +15,17 @@ jobs:
   supervise:
     runs-on: ubuntu-24.04
     steps:
+      - name: Mint yang-supervisor app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.YANG_SUPERVISOR_APP_ID }}
+          private-key: ${{ secrets.YANG_SUPERVISOR_APP_PRIVATE_KEY }}
+
       - name: yang-supervisor
         uses: YangYang-Research/yang-supervisor@v0.1.0
         with:
           PROVIDER: yangyang
           API_KEY: ${{ secrets.YANG_API_TOKEN }}
           MODEL_NAME: auto
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}

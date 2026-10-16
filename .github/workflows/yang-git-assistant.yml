@@ -1,4 +1,4 @@
-name: Yang Supervisor Agent (YSA)
+name: Yang Git Assistant (YGA)
 
 on:
   issues:
@@ -15,15 +15,15 @@ jobs:
   supervise:
     runs-on: ubuntu-24.04
     steps:
-      - name: Mint yang-supervisor app token
+      - name: Mint yang-git-assistant app token
         id: app-token
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ secrets.YANG_SUPERVISOR_APP_ID }}
-          private-key: ${{ secrets.YANG_SUPERVISOR_APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.YANG_GIT_ASSISTANT_APP_ID }}
+          private-key: ${{ secrets.YANG_GIT_ASSISTANT_APP_PRIVATE_KEY }}
 
-      - name: yang-supervisor
-        uses: YangYang-Research/yang-supervisor@v0.1.1
+      - name: yang-git-assistant
+        uses: YangYang-Research/yang-git-assistant@v0.2.0
         with:
           PROVIDER: yangyang
           API_KEY: ${{ secrets.YANG_API_TOKEN }}

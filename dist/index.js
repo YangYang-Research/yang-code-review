@@ -44128,6 +44128,12 @@ const DEFAULT_INPUT_TOKEN_LIMIT = 32768;
 /** Leave headroom for prompt wrapper + model variance. */
 const SAFETY_RATIO = 0.8;
 
+/**
+ * Hard cap on diff / refine text per call.
+ * Workers Free kills ~100KB `/v1/agents` bodies (`exceededCpu`). 32KB stays near parts that completed.
+ */
+const MAX_PART_CHARS = 32_000;
+
 function isInputTokenLimitError(error) {
   const message = String(error?.message || error || '');
   return TOKEN_LIMIT_RE.test(message) || TOKEN_LIMIT_LOOSE_RE.test(message);
@@ -44248,7 +44254,28 @@ function maxDiffCharsForLimit({
   safetyRatio = SAFETY_RATIO
 }) {
   const budgetChars = Math.floor(limit * safetyRatio * charsPerToken);
-  return Math.max(1024, budgetChars - Math.max(0, overheadChars));
+  const fitted = Math.max(1024, budgetChars - Math.max(0, overheadChars));
+  return Math.min(fitted, MAX_PART_CHARS);
+}
+
+/** Greedy groups whose combined text stays under maxChars. A single oversized item stays alone. */
+function packByChars(items, maxChars) {
+  const groups = [];
+  let current = [];
+  let size = 0;
+  for (const item of items) {
+    const text = String(item ?? '');
+    const len = text.length;
+    if (current.length > 0 && size + len > maxChars) {
+      groups.push(current);
+      current = [];
+      size = 0;
+    }
+    current.push(text);
+    size += len;
+  }
+  if (current.length) groups.push(current);
+  return groups;
 }
 
 /**
@@ -44353,26 +44380,82 @@ async function requestReviewWithSplit({
       partials.push(partContent);
     }
 
-    onRefine?.({partialCount: partials.length});
-    return requestReview({
+    return refinePartials(partials, {
       config,
       model,
       temperature,
       maxTokens,
       agent,
-      messages: buildRefineMessages({
-        owner,
-        repo,
-        eventName,
-        partials,
-        includeSystem
-      }),
+      owner,
+      repo,
+      eventName,
+      includeSystem,
       timeoutMs,
       maxAttempts,
       fetchImpl,
-      onRetry
+      onRetry,
+      onRefine
     });
   }
+}
+
+async function refinePartials(partials, ctx) {
+  let current = partials.slice();
+  while (current.length > 1) {
+    const groups = packByChars(current, MAX_PART_CHARS);
+    const stuck = groups.length === current.length && groups.every((group) => group.length === 1);
+    if (groups.length === 1 || stuck) {
+      ctx.onRefine?.({partialCount: current.length});
+      return requestReview({
+        config: ctx.config,
+        model: ctx.model,
+        temperature: ctx.temperature,
+        maxTokens: ctx.maxTokens,
+        agent: ctx.agent,
+        messages: buildRefineMessages({
+          owner: ctx.owner,
+          repo: ctx.repo,
+          eventName: ctx.eventName,
+          partials: current,
+          includeSystem: ctx.includeSystem
+        }),
+        timeoutMs: ctx.timeoutMs,
+        maxAttempts: ctx.maxAttempts,
+        fetchImpl: ctx.fetchImpl,
+        onRetry: ctx.onRetry
+      });
+    }
+    const next = [];
+    for (const group of groups) {
+      if (group.length === 1) {
+        next.push(group[0]);
+        continue;
+      }
+      ctx.onRefine?.({partialCount: group.length});
+      next.push(
+        await requestReview({
+          config: ctx.config,
+          model: ctx.model,
+          temperature: ctx.temperature,
+          maxTokens: ctx.maxTokens,
+          agent: ctx.agent,
+          messages: buildRefineMessages({
+            owner: ctx.owner,
+            repo: ctx.repo,
+            eventName: ctx.eventName,
+            partials: group,
+            includeSystem: ctx.includeSystem
+          }),
+          timeoutMs: ctx.timeoutMs,
+          maxAttempts: ctx.maxAttempts,
+          fetchImpl: ctx.fetchImpl,
+          onRetry: ctx.onRetry
+        })
+      );
+    }
+    current = next;
+  }
+  return current[0];
 }
 
 ;// CONCATENATED MODULE: ./src/sarif.js

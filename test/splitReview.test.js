@@ -4,8 +4,10 @@ import test from 'node:test';
 import {buildRefineMessages} from '../src/prompt.js';
 import {
   DEFAULT_INPUT_TOKEN_LIMIT,
+  MAX_PART_CHARS,
   estimateCharsPerToken,
   isInputTokenLimitError,
+  packByChars,
   parseTokenLimitError,
   requestReviewWithSplit,
   splitUnifiedDiff
@@ -133,4 +135,70 @@ test('requestReviewWithSplit retries via chunks then refine on token limit', asy
   assert.ok(calls >= 3, `expected split+parts+refine, got ${calls} calls`);
   assert.ok(events.some(([k]) => k === 'split'));
   assert.ok(events.some(([k]) => k === 'refine'));
+});
+
+test('packByChars keeps each group under the cap', () => {
+  const groups = packByChars(['a'.repeat(20), 'b'.repeat(20), 'c'.repeat(10)], 30);
+  assert.equal(groups.length, 2);
+  assert.ok(groups.every((group) => group.join('').length <= 30));
+});
+
+test('requestReviewWithSplit caps part size below the worker CPU body', async () => {
+  const fetchImpl = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    const user = body.messages.find((m) => m.role === 'user')?.content || '';
+    if (user.length > MAX_PART_CHARS + 8000) {
+      return {
+        ok: false,
+        status: 400,
+        async text() {
+          return JSON.stringify({
+            error: {
+              message: 'Total tokens exceed the input max tokens limit. 40000 > 32768'
+            }
+          });
+        }
+      };
+    }
+    const isRefine = user.includes('merging') && user.includes('partial');
+    const content = isRefine ? '# Final\n```ycr-findings\n[]\n```' : '# Part\n```ycr-findings\n[]\n```';
+    return {
+      ok: true,
+      status: 200,
+      async text() {
+        return JSON.stringify({choices: [{message: {content}}]});
+      }
+    };
+  };
+
+  const diff = `diff --git a/big.js b/big.js\n${'+x'.repeat(90_000)}\n`;
+  let maxDiffChars = 0;
+  let maxPart = 0;
+  await requestReviewWithSplit({
+    config: {
+      name: 'yangyang',
+      protocol: 'openai',
+      apiKey: 'k',
+      baseUrl: 'https://example.test/v1'
+    },
+    model: 'auto',
+    maxTokens: 256,
+    owner: 'acme',
+    repo: 'app',
+    eventName: 'pull_request',
+    diff,
+    includeSystem: false,
+    maxAttempts: 1,
+    fetchImpl,
+    onSplit: (info) => {
+      maxDiffChars = info.maxDiffChars;
+    },
+    onPart: (info) => {
+      maxPart = Math.max(maxPart, info.chars);
+    }
+  });
+
+  assert.equal(maxDiffChars, MAX_PART_CHARS);
+  assert.ok(maxPart <= MAX_PART_CHARS);
+  assert.ok(maxPart > 0);
 });

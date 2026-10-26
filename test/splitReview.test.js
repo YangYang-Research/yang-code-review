@@ -137,6 +137,75 @@ test('requestReviewWithSplit retries via chunks then refine on token limit', asy
   assert.ok(events.some(([k]) => k === 'refine'));
 });
 
+test('requestReviewWithSplit skips a failed part and still refines', async () => {
+  const fetchImpl = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    const user = body.messages.find((m) => m.role === 'user')?.content || '';
+    if (!user.includes('partial review') && !user.includes('merging')) {
+      return {
+        ok: false,
+        status: 400,
+        async text() {
+          return JSON.stringify({
+            error: {
+              message:
+                'Total tokens exceed the input max tokens limit. 20000 > 1000'
+            }
+          });
+        }
+      };
+    }
+    if (user.includes('partial review 2/')) {
+      return {
+        ok: false,
+        status: 503,
+        async text() {
+          return 'upstream timeout';
+        }
+      };
+    }
+    const isRefine = user.includes('merging') && user.includes('partial');
+    const content = isRefine
+      ? '# Final\n```ycr-findings\n[]\n```'
+      : '# Part\n```ycr-findings\n[]\n```';
+    return {
+      ok: true,
+      status: 200,
+      async text() {
+        return JSON.stringify({
+          choices: [{message: {content}}]
+        });
+      }
+    };
+  };
+
+  const file = (name, n) =>
+    `diff --git a/${name} b/${name}\n--- a/${name}\n+++ b/${name}\n${'+line\n'.repeat(n)}`;
+  const diff = file('a.js', 80) + file('b.js', 80) + file('c.js', 80);
+  const skipped = [];
+  const result = await requestReviewWithSplit({
+    config: {
+      name: 'yangyang',
+      protocol: 'openai',
+      apiKey: 'k',
+      baseUrl: 'https://example.test/v1'
+    },
+    model: 'auto',
+    maxTokens: 256,
+    owner: 'acme',
+    repo: 'app',
+    eventName: 'pull_request',
+    diff,
+    includeSystem: false,
+    maxAttempts: 1,
+    fetchImpl,
+    onPartError: (info) => skipped.push(info.index)
+  });
+
+  assert.match(result, /Final|ycr-findings/);
+  assert.deepEqual(skipped, [2]);
+});
+
 test('packByChars keeps each group under the cap', () => {
   const groups = packByChars(['a'.repeat(20), 'b'.repeat(20), 'c'.repeat(10)], 30);
   assert.equal(groups.length, 2);

@@ -195,6 +195,11 @@ async function run() {
         onPart: ({index, total, chars}) => {
           core.info(`Reviewing split part ${index}/${total} (${chars} chars)…`);
         },
+        onPartError: ({index, total, error}) => {
+          core.warning(
+            `Split part ${index}/${total} failed and was skipped: ${error.message}`
+          );
+        },
         onRefine: ({partialCount}) => {
           core.info(
             `Merging ${partialCount} partial reviews into one refined YCR report…`

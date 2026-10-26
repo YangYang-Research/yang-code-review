@@ -44298,6 +44298,7 @@ async function requestReviewWithSplit({
   onRetry,
   onSplit,
   onPart,
+  onPartError,
   onRefine
 }) {
   const buildMessages = (chunk, partLabel) =>
@@ -44362,22 +44363,38 @@ async function requestReviewWithSplit({
     });
 
     const partials = [];
+    let lastPartError = null;
     for (let i = 0; i < chunks.length; i += 1) {
-      const partLabel = `${i + 1}/${chunks.length}`;
-      onPart?.({index: i + 1, total: chunks.length, chars: chunks[i].length});
-      const partContent = await requestReview({
-        config,
-        model,
-        temperature,
-        maxTokens,
-        agent,
-        messages: buildMessages(chunks[i], partLabel),
-        timeoutMs,
-        maxAttempts,
-        fetchImpl,
-        onRetry
-      });
-      partials.push(partContent);
+      const index = i + 1;
+      const partLabel = `${index}/${chunks.length}`;
+      onPart?.({index, total: chunks.length, chars: chunks[i].length});
+      try {
+        const partContent = await requestReview({
+          config,
+          model,
+          temperature,
+          maxTokens,
+          agent,
+          messages: buildMessages(chunks[i], partLabel),
+          timeoutMs,
+          maxAttempts,
+          fetchImpl,
+          onRetry
+        });
+        if (String(partContent || '').trim()) {
+          partials.push(partContent);
+        }
+      } catch (partError) {
+        lastPartError = partError;
+        onPartError?.({
+          index,
+          total: chunks.length,
+          error: partError
+        });
+      }
+    }
+    if (partials.length === 0) {
+      throw lastPartError || error;
     }
 
     return refinePartials(partials, {
@@ -45454,6 +45471,11 @@ async function run() {
         },
         onPart: ({index, total, chars}) => {
           core.info(`Reviewing split part ${index}/${total} (${chars} chars)…`);
+        },
+        onPartError: ({index, total, error}) => {
+          core.warning(
+            `Split part ${index}/${total} failed and was skipped: ${error.message}`
+          );
         },
         onRefine: ({partialCount}) => {
           core.info(

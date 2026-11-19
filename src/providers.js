@@ -62,10 +62,10 @@ function createOpenAIRequest(config, {model, temperature, maxTokens, messages, a
     'user-agent': 'github-actions/yang-code-review'
   };
   if (config.apiKey) {
-    // YAG accepts Bearer, x-api-key, or x-yang-api-token (Token-Base64).
+    // YAG: Bearer / x-api-key / x-yang-api-key with personal key sk-yyng…
     headers.authorization = `Bearer ${config.apiKey}`;
     if (config.name === 'yangyang') {
-      headers['x-yang-api-token'] = config.apiKey;
+      headers['x-yang-api-key'] = config.apiKey;
     }
   }
   if (config.name === 'openrouter') {

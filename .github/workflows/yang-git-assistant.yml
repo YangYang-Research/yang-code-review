@@ -26,6 +26,6 @@ jobs:
         uses: YangYang-Research/yang-git-assistant@v0.2.0
         with:
           PROVIDER: yangyang
-          API_KEY: ${{ secrets.YANG_API_TOKEN }}
+          API_KEY: ${{ secrets.YANG_API_KEY }}
           MODEL_NAME: auto
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}

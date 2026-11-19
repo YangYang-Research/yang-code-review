@@ -164,10 +164,10 @@ test('sends an OpenAI-compatible request and returns review text', async () => {
   assert.equal(captured.options.headers.authorization, 'Bearer secret');
 });
 
-test('authenticates YangYang gateway with Bearer + x-yang-api-token', async () => {
+test('authenticates YangYang gateway with Bearer + x-yang-api-key', async () => {
   const config = resolveProviderConfig({
     provider: 'yangyang',
-    apiKey: 'yang-token'
+    apiKey: 'sk-yyngabcdefghijklmnopqrstuvwxyz012345'
   });
   let captured;
   const fetchImpl = async (url, options) => {
@@ -191,8 +191,15 @@ test('authenticates YangYang gateway with Bearer + x-yang-api-token', async () =
 
   assert.equal(result, 'Yang review');
   assert.equal(captured.url, 'https://ai.yyng.icu/v1/agents');
-  assert.equal(captured.options.headers['x-yang-api-token'], 'yang-token');
-  assert.equal(captured.options.headers.authorization, 'Bearer yang-token');
+  assert.equal(
+    captured.options.headers['x-yang-api-key'],
+    'sk-yyngabcdefghijklmnopqrstuvwxyz012345'
+  );
+  assert.equal(
+    captured.options.headers.authorization,
+    'Bearer sk-yyngabcdefghijklmnopqrstuvwxyz012345'
+  );
+  assert.equal(captured.options.headers['x-yang-api-token'], undefined);
   const body = JSON.parse(captured.options.body);
   assert.equal(body.max_tokens, 1000);
   assert.equal(body.stream, false);

@@ -149,12 +149,12 @@ with:
   GITHUB_TOKEN: ${{ github.token }}
 ```
 
-YangYang AI Gateway (`ai.yyng.icu` — Studio Token-Base64):
+YangYang AI Gateway (`ai.yyng.icu` — Studio → Profile → API Keys, `sk-yyng…`):
 
 ```yaml
 with:
   PROVIDER: yangyang
-  API_KEY: ${{ secrets.YANG_API_TOKEN }}
+  API_KEY: ${{ secrets.YANG_API_KEY }}
   MODEL_NAME: auto
   GITHUB_TOKEN: ${{ github.token }}
 ```
